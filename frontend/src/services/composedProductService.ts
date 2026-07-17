@@ -9,13 +9,13 @@ const prepareFormData = (data: ComposedProductInput) => {
   const formData = new FormData();
 
   if (data.name) formData.append("name", data.name);
-  if (data.price !== undefined)
+  if (data.price != null)
     formData.append("price", data.price.toString());
   if (data.is_active !== undefined)
     formData.append("is_active", String(data.is_active));
   if (data.entrepreneurship_id)
     formData.append("entrepreneurship_id", data.entrepreneurship_id);
-  if (data.category_id !== undefined)
+  if (data.category_id != null)
     formData.append("category_id", data.category_id.toString());
   if (data.components)
     formData.append("components", JSON.stringify(data.components));
@@ -43,11 +43,11 @@ export const updateComposedProduct = async (
 ): Promise<EntrepreneurshipProduct> => {
   const formData = new FormData();
   if (data.name) formData.append("name", data.name);
-  if (data.price !== undefined)
+  if (data.price != null)
     formData.append("price", data.price.toString());
   if (data.is_active !== undefined)
     formData.append("is_active", String(data.is_active));
-  if (data.category_id !== undefined)
+  if (data.category_id != null)
     formData.append("category_id", data.category_id.toString());
   if (data.components)
     formData.append("components", JSON.stringify(data.components));

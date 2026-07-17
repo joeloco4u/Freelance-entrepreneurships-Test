@@ -14,14 +14,14 @@ const prepareFormData = (data: Partial<ProductInput>) => {
   // Recorremos los campos y los agregamos al FormData
   // Nota: Los valores numéricos y booleanos se convierten a string automáticamente en FormData
   if (data.name) formData.append("name", data.name);
-  if (data.price !== undefined) formData.append("price", data.price.toString());
-  if (data.current_stock !== undefined)
+  if (data.price != null) formData.append("price", data.price.toString());
+  if (data.current_stock != null)
     formData.append("current_stock", data.current_stock.toString());
   if (data.is_active !== undefined)
     formData.append("is_active", String(data.is_active));
   if (data.entrepreneurship_id)
     formData.append("entrepreneurship_id", data.entrepreneurship_id);
-  if (data.category_id !== undefined)
+  if (data.category_id != null)
     formData.append("category_id", data.category_id.toString());
 
   // El archivo debe ir con la clave "image" para que coincida con upload.single("image") del backend
