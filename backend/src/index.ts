@@ -2,6 +2,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express, { type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import authRouter from "./routes/authRoutes.js";
 import categoryRouter from "./routes/categoryRoutes.js";
 import composedProductRouter from "./routes/composedProductRoutes.js";
@@ -75,17 +76,15 @@ app.use("/api/software-updates", softwareUpdatesRouter);
 
 // Global error handler
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error("Unhandled error:", err);
-  res.status(500).json({ error: "Error interno del servidor" });
-});
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res
+        .status(400)
+        .json({ error: "La imagen no debe superar los 2MB" });
+    }
+    return res.status(400).json({ error: err.message });
+  }
 
-// 404 catch-all
-app.use((_req, res) => {
-  res.status(404).json({ error: "Ruta no encontrada" });
-});
-
-// Global error handler
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Unhandled error:", err);
   res.status(500).json({ error: "Error interno del servidor" });
 });
