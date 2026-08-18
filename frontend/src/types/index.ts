@@ -135,6 +135,8 @@ export interface LoginResponse {
 
 export interface SimpleResponse {
   message: string;
+  // Set when the action succeeded but a side effect (e.g. sending an email) failed.
+  warning?: string;
 }
 
 export interface SignupRequest {

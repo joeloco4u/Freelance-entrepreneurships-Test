@@ -2,6 +2,8 @@ import type { Request, Response } from "express";
 import z from "zod";
 import { supabaseAdmin } from "../db.js";
 import {
+	ACCOUNT_INVITE_SUBJECT,
+	accountInviteEmailHtml,
 	PASSWORD_RECOVERY_SUBJECT,
 	passwordRecoveryEmailHtml,
 } from "../schemas/emailTemplates.js";
@@ -21,6 +23,11 @@ const RECOVERY_GENERIC_MESSAGE =
 
 const RECOVERY_SEND_ERROR =
 	"No se pudo enviar el correo de recuperación. Intenta de nuevo más tarde.";
+
+// The account already exists in Auth when this shows up, so IT should not retry
+// the approval: the user can finish activating it from the recovery flow.
+const INVITE_SEND_WARNING =
+	'La cuenta fue creada, pero no se pudo enviar el correo de invitación. Pídele al usuario que active su cuenta desde "¿Olvidaste tu contraseña?".';
 
 export async function SignupRequest(req: Request, res: Response) {
 	try {
@@ -163,31 +170,85 @@ export async function ApproveSignup(req: Request, res: Response) {
 			return res.status(404).json({ error: "Solicitud no encontrada" });
 		}
 
+		const appUrl = process.env.APP_URL;
+		if (!appUrl) {
+			console.error("[ApproveSignup] Falta la variable de entorno APP_URL");
+			return res
+				.status(500)
+				.json({ error: "Error al aprobar la solicitud de acceso" });
+		}
+
 		// 2. Crear el usuario en Supabase Auth
 		const rolesArray = Array.isArray(request.role)
 			? request.role
 			: [request.role];
-		const { data: authUser, error: authError } =
-			await supabaseAdmin.auth.admin.inviteUserByEmail(request.email, {
-				redirectTo: `${process.env.APP_URL}/reset-password`,
-				data: {
-					name: request.user_name,
-					entrepreneurship_name: request.entrepreneurship_name,
-					roles: rolesArray,
+		const email = request.email.toLowerCase().trim();
+
+		// generateLink creates the user and builds the invite link WITHOUT sending any
+		// email, so we can deliver it through Resend instead of Supabase's built-in mailer.
+		const { data, error: authError } =
+			await supabaseAdmin.auth.admin.generateLink({
+				type: "invite",
+				email,
+				options: {
+					data: {
+						name: request.user_name,
+						entrepreneurship_name: request.entrepreneurship_name,
+						roles: rolesArray,
+					},
+					redirectTo: `${appUrl}/reset-password`,
 				},
 			});
 
-		if (authError) return res.status(400).json({ error: authError.message });
+		const actionLink = data?.properties?.action_link;
+		if (authError || !actionLink) {
+			const authMessage = authError?.message ?? "sin action_link";
+			console.error(
+				`[ApproveSignup] No se generó la invitación para ${email}: ${authMessage}`,
+			);
+			const alreadyRegistered = authMessage
+				.toLowerCase()
+				.includes("already been registered");
+			return res.status(400).json({
+				error: alreadyRegistered
+					? "Ya existe una cuenta asociada a este correo"
+					: "No se pudo crear la cuenta del usuario",
+			});
+		}
 
-		// 3. Marcar la solicitud como aprobada
+		// 3. Marcar la solicitud como aprobada. La cuenta ya existe en Auth, así que
+		// dejarla pendiente haría que cualquier reintento choque con "ya registrado".
 		await supabaseAdmin
 			.from("signup_request")
 			.update({ status: "APROBADO" }) // Asegúrate de tener este ENUM o columna
 			.eq("id", requestId);
 
+		// 4. Enviar la invitación por Resend
+		const metadataName =
+			typeof request.user_name === "string" ? request.user_name : "";
+
+		try {
+			await sendEmail({
+				to: email,
+				subject: ACCOUNT_INVITE_SUBJECT,
+				html: accountInviteEmailHtml(metadataName, actionLink),
+			});
+		} catch (sendError) {
+			const sendMessage =
+				sendError instanceof Error ? sendError.message : "Error desconocido";
+			console.error(
+				`[ApproveSignup] Falló el envío de la invitación a ${email}: ${sendMessage}`,
+			);
+			return res.status(200).json({
+				message: "Proveedor aprobado",
+				warning: INVITE_SEND_WARNING,
+				user: data.user,
+			});
+		}
+
 		res.status(200).json({
 			message: "Proveedor aprobado y correo de invitación enviado",
-			user: authUser.user,
+			user: data.user,
 		});
 	} catch (error) {
 		const errorMessage = error instanceof Error ? error.message : "Error al aprobar la solicitud e invitar al usuario";

@@ -70,9 +70,14 @@ export const useSignupRequests = () => {
   const handleApprove = async (id: string) => {
     setProcessingId(id);
     try {
-      await approveAccessRequest(id);
-      const successMsg = "Solicitud aprobada con éxito";
-      toast.success(successMsg);
+      const response = await approveAccessRequest(id);
+      // La solicitud queda aprobada aunque falle el correo, así que en ambos casos
+      // sacamos la fila de la lista y solo cambia el aviso que ve IT.
+      if (response.warning) {
+        toast.warning(response.warning, { autoClose: false });
+      } else {
+        toast.success("Solicitud aprobada con éxito");
+      }
       // Actualizamos la lista base (requests)
       setRequests((prev) => prev.filter((req) => req.id !== id));
     } catch (error) {
