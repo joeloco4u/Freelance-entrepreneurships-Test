@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { supabase } from "../config/supabaseClient";
+import { requestPasswordRecovery } from "../services/authService";
 
 export function useForgotPassword() {
   const [email, setEmail] = useState("");
@@ -13,14 +13,9 @@ export function useForgotPassword() {
     setError(null);
 
     try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
-        email,
-        {
-          redirectTo: `${window.location.origin}/reset-password`,
-        },
-      );
-
-      if (resetError) throw resetError;
+      // The backend mints the recovery link and sends it through Resend, so this
+      // no longer depends on Supabase's built-in mailer.
+      await requestPasswordRecovery(email);
       setSuccess(true);
     } catch (err) {
       setError(

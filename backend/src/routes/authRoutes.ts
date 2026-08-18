@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   ApproveSignup,
+  ForgotPassword,
   GetPendingRequests,
   Login,
   RejectSignup,
@@ -14,6 +15,7 @@ const authRouter: Router = Router();
 // Rutas publicas
 authRouter.post("/request-access", SignupRequest);
 authRouter.post("/login", Login);
+authRouter.post("/forgot-password", ForgotPassword);
 
 // Rutas protegidas
 // authRouter.use(authenticate);

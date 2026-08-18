@@ -99,10 +99,17 @@ PORT=3001
 SUPABASE_URL=<supabase-url>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 CORS_ORIGIN=http://localhost:5173
+ALLOWED_IPS=<comma-separated-ips>
+APP_URL=http://localhost:5173        # frontend base URL, used for auth redirect links
+RESEND_API_KEY=<resend-key>
+EMAIL_FROM=<verified-sender>
 SLACK_WEBHOOK_URL_IT=<webhook>
+SLACK_TOKEN_SHEET_URL=<sheet-url>
 GOOGLE_SERVICE_ACCOUNT_EMAIL=<email>
 GOOGLE_PRIVATE_KEY=<key>
 ```
+
+See `backend/.env.example` for the full annotated list.
 
 ---
 

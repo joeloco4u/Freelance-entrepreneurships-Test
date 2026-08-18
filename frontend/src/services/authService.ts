@@ -44,6 +44,15 @@ export async function rejectAccessRequest(id: string): Promise<void> {
   await api.patch(`/auth/reject-signup/${id}`);
 }
 
+export async function requestPasswordRecovery(
+  email: string,
+): Promise<SimpleResponse> {
+  const { data } = await api.post<SimpleResponse>("/auth/forgot-password", {
+    email,
+  });
+  return data;
+}
+
 export async function updatePassword(password: string) {
   const { data, error } = await supabase.auth.updateUser({
     password: password,
