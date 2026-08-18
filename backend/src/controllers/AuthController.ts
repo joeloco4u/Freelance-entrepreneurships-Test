@@ -1,7 +1,25 @@
 import type { Request, Response } from "express";
+import z from "zod";
 import { supabaseAdmin } from "../db.js";
+import {
+	PASSWORD_RECOVERY_SUBJECT,
+	passwordRecoveryEmailHtml,
+} from "../schemas/emailTemplates.js";
 import { signupRequestTemplate } from "../schemas/slackTemplates.js";
+import { sendEmail } from "../services/emailService.js";
 import { sendSlackWebhookNotification } from "../services/slackService.js";
+
+const ForgotPasswordSchema = z.object({
+	email: z.email("Correo electrónico inválido"),
+});
+
+// Generic reply used for every outcome that depends on whether the account
+// exists, so the endpoint cannot be used to enumerate registered emails.
+const RECOVERY_GENERIC_MESSAGE =
+	"Si existe una cuenta con ese correo, te enviamos un enlace para restablecer tu contraseña.";
+
+const RECOVERY_SEND_ERROR =
+	"No se pudo enviar el correo de recuperación. Intenta de nuevo más tarde.";
 
 export async function SignupRequest(req: Request, res: Response) {
 	try {
@@ -202,5 +220,67 @@ export async function Login(req: Request, res: Response) {
 		const errorMessage = error instanceof Error ? error.message : "Error al verificar las credenciales";
 		console.error("Login error:", errorMessage);
 		return res.status(500).json({ error: "Error al iniciar sesión" });
+	}
+}
+
+export async function ForgotPassword(req: Request, res: Response) {
+	try {
+		const parsed = ForgotPasswordSchema.safeParse(req.body);
+		if (!parsed.success) {
+			return res.status(400).json({ error: "Correo electrónico inválido" });
+		}
+
+		const email = parsed.data.email.toLowerCase().trim();
+
+		const appUrl = process.env.APP_URL;
+		if (!appUrl) {
+			console.error("[ForgotPassword] Falta la variable de entorno APP_URL");
+			return res.status(500).json({ error: RECOVERY_SEND_ERROR });
+		}
+
+		// generateLink builds the recovery link WITHOUT sending any email, so we can
+		// deliver it through Resend instead of Supabase's built-in mailer.
+		const { data, error } = await supabaseAdmin.auth.admin.generateLink({
+			type: "recovery",
+			email,
+			options: { redirectTo: `${appUrl}/reset-password` },
+		});
+
+		const actionLink = data?.properties?.action_link;
+		if (error || !actionLink) {
+			// Usually the account does not exist. Log the real reason but reply with
+			// the generic message so the response is identical either way.
+			console.warn(
+				`[ForgotPassword] No se generó enlace para ${email}: ${error?.message ?? "sin action_link"}`,
+			);
+			return res.status(200).json({ message: RECOVERY_GENERIC_MESSAGE });
+		}
+
+		const metadataName = data.user?.user_metadata?.name;
+		const userName = typeof metadataName === "string" ? metadataName : "";
+
+		try {
+			await sendEmail({
+				to: email,
+				subject: PASSWORD_RECOVERY_SUBJECT,
+				html: passwordRecoveryEmailHtml(userName, actionLink),
+			});
+		} catch (sendError) {
+			const sendMessage =
+				sendError instanceof Error ? sendError.message : "Error desconocido";
+			console.error(
+				`[ForgotPassword] Falló el envío del correo a ${email}: ${sendMessage}`,
+			);
+			return res.status(500).json({ error: RECOVERY_SEND_ERROR });
+		}
+
+		return res.status(200).json({ message: RECOVERY_GENERIC_MESSAGE });
+	} catch (error) {
+		const errorMessage =
+			error instanceof Error
+				? error.message
+				: "Error al procesar la solicitud de recuperación";
+		console.error("Error en ForgotPassword:", errorMessage);
+		return res.status(500).json({ error: RECOVERY_SEND_ERROR });
 	}
 }
