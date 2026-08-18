@@ -6,6 +6,7 @@ import {
 	passwordRecoveryEmailHtml,
 } from "../schemas/emailTemplates.js";
 import { signupRequestTemplate } from "../schemas/slackTemplates.js";
+import { findAuthUserByEmail } from "../services/authUserService.js";
 import { sendEmail } from "../services/emailService.js";
 import { sendSlackWebhookNotification } from "../services/slackService.js";
 
@@ -32,38 +33,78 @@ export async function SignupRequest(req: Request, res: Response) {
 
 		const rolesArray = Array.isArray(role) ? role : [role];
 
-		const { data: existingRequests, error: existingError } =
-			await supabaseAdmin
-				.from("signup_request")
-				.select("id, status, created_at")
-				.eq("email", email.toLowerCase().trim())
-				.in("status", ["PENDIENTE", "APROBADO"])
-				.order("created_at", { ascending: false });
+		const normalizedEmail = email.toLowerCase().trim();
+
+		const { data: existingRequests, error: existingError } = await supabaseAdmin
+			.from("signup_request")
+			.select("id, status, created_at")
+			.eq("email", normalizedEmail)
+			.in("status", ["PENDIENTE", "APROBADO"])
+			.order("created_at", { ascending: false });
 
 		if (existingError)
 			return res.status(400).json({ error: existingError.message });
 
-		if (existingRequests && existingRequests.length > 0) {
-			const lastRequest = existingRequests[0];
-			if (lastRequest?.status === "APROBADO") {
+		// Rows are ordered newest first, so find() returns the latest row per status.
+		const approvedRequest = existingRequests?.find(
+			(request) => request.status === "APROBADO",
+		);
+
+		if (approvedRequest) {
+			// An approved row only proves the account existed at some point: it is never
+			// cleaned up when IT deletes the user, so Supabase Auth is the source of
+			// truth for whether the account is still around.
+			let accountExists = true;
+			try {
+				accountExists = (await findAuthUserByEmail(normalizedEmail)) !== null;
+			} catch (lookupError) {
+				// Fail closed: a transient Auth outage must not let duplicates through.
+				const lookupMessage =
+					lookupError instanceof Error
+						? lookupError.message
+						: "Error desconocido";
+				console.error(
+					`[SignupRequest] No se pudo verificar ${normalizedEmail} en Auth: ${lookupMessage}`,
+				);
+			}
+
+			if (accountExists) {
 				return res.status(400).json({
 					error: "Ya existe una cuenta asociada a este correo",
 				});
 			}
 
-			const requestAge = Date.now() - new Date(lastRequest?.created_at).getTime();
+			console.info(
+				`[SignupRequest] Solicitud aprobada ${approvedRequest.id} obsoleta: la cuenta de ${normalizedEmail} ya no existe en Auth`,
+			);
+		}
+
+		const pendingRequest = existingRequests?.find(
+			(request) => request.status === "PENDIENTE",
+		);
+
+		if (pendingRequest) {
+			const requestAge =
+				Date.now() - new Date(pendingRequest.created_at).getTime();
 			const oneDayMs = 24 * 60 * 60 * 1000;
 			if (requestAge < oneDayMs) {
-				const hoursRemaining = Math.ceil((oneDayMs - requestAge) / (60 * 60 * 1000));
+				const hoursRemaining = Math.ceil(
+					(oneDayMs - requestAge) / (60 * 60 * 1000),
+				);
 				return res.status(429).json({
 					error: `Ya tienes una solicitud pendiente. Espera ${hoursRemaining} hora(s) antes de enviar otra.`,
 				});
 			}
 		}
 
-		const { data, error } = await supabaseAdmin
-			.from("signup_request")
-			.insert([{ email: email.toLowerCase().trim(), user_name, entrepreneurship_name, role: rolesArray }]);
+		const { error } = await supabaseAdmin.from("signup_request").insert([
+			{
+				email: normalizedEmail,
+				user_name,
+				entrepreneurship_name,
+				role: rolesArray,
+			},
+		]);
 
 		if (error) return res.status(400).json({ error: error.message });
 
