@@ -9,7 +9,7 @@ import {
 } from "../schemas/slackTemplates.js";
 import { isGoogleSheetsConfigured } from "../services/googleSheetsConfig.js";
 import {
-  findFreelancerRow,
+  getOrCreateFreelancerRow,
   updateEntrepreneurEarnings,
   updateEntrepreneurshipSpent,
 } from "../services/googleSheetsService.js";
@@ -880,7 +880,10 @@ export async function updatePayrollStatus(req: Request, res: Response) {
     Object.keys(entrepreneurshipTotals).length > 0
   ) {
     try {
-      const rowNumber = await findFreelancerRow(consumerName, consumerEmail);
+      const rowNumber = await getOrCreateFreelancerRow(
+        consumerName,
+        consumerEmail,
+      );
       if (rowNumber !== null) {
         for (const [entrepreneurshipName, total] of Object.entries(
           entrepreneurshipTotals,
@@ -1652,7 +1655,7 @@ async function processSinglePayroll(saleId: string) {
   }
 
   if (isGoogleSheetsConfigured() && consumerName && consumerEmail && Object.keys(entrepreneurshipTotals).length > 0) {
-    const rowNumber = await findFreelancerRow(consumerName, consumerEmail);
+    const rowNumber = await getOrCreateFreelancerRow(consumerName, consumerEmail);
     if (rowNumber !== null) {
       for (const [entrepreneurshipName, total] of Object.entries(entrepreneurshipTotals)) {
         await updateEntrepreneurshipSpent(rowNumber, entrepreneurshipName, total);
