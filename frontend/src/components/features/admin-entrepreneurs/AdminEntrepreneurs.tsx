@@ -14,6 +14,8 @@ import RefundSaleModal from "../my-entrepreneurships/EntrepreneurShipsMenu/sales
 import { refundSale } from "../../../services/saleService";
 import type { GlobalSale } from "../../../types";
 import { exportSalesToExcel } from "../../../utils/exportToExcel";
+import { getErrorMessage } from "../../../utils/errorMessage";
+import { ERROR_MESSAGES } from "../../../constants/errorMessages";
 
 export default function AdminEntrepreneurs() {
   const logic = useAdminEntrepreneurs();
@@ -48,9 +50,7 @@ export default function AdminEntrepreneurs() {
         logic.refetch(true);
       } catch (error) {
         const errorMessage =
-          error instanceof Error
-            ? error.message
-            : "Error al procesar el reembolso";
+          getErrorMessage(error, ERROR_MESSAGES.sales.refund);
         toast.error(errorMessage);
       } finally {
         setIsRefunding(false);

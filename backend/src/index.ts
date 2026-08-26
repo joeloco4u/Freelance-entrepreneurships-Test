@@ -15,6 +15,8 @@ import softwareUpdatesRouter from "./routes/softwareUpdatesRoutes.js";
 import userRouter from "./routes/userRoutes.js";
 import { loadAppConfig } from "./services/appConfigStore.js";
 import { ipAllowlist } from "./middleware/ipAllowlist.js";
+import { respondWithError } from "./utils/errors.js";
+import { logError } from "./utils/logger.js";
 
 dotenv.config();
 
@@ -74,24 +76,24 @@ app.use("/api/composed-products", composedProductRouter);
 app.use("/api/sales", saleRouter);
 app.use("/api/software-updates", softwareUpdatesRouter);
 
-// Global error handler
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  if (err instanceof multer.MulterError) {
-    if (err.code === "LIMIT_FILE_SIZE") {
-      return res
-        .status(400)
-        .json({ error: "La imagen no debe superar los 2MB" });
-    }
-    return res.status(400).json({ error: err.message });
-  }
-
-  console.error("Unhandled error:", err);
-  res.status(500).json({ error: "Error interno del servidor" });
-});
-
-// 404 catch-all
+// 404 catch-all (must be registered before the error handler)
 app.use((_req, res) => {
   res.status(404).json({ error: "Ruta no encontrada" });
+});
+
+// Global error handler — the safety net. Express 5 forwards rejected async
+// handlers here automatically, so nothing can leak a raw error by accident.
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (err instanceof multer.MulterError) {
+    logError("upload", err);
+    const message =
+      err.code === "LIMIT_FILE_SIZE"
+        ? "La imagen no debe superar los 2MB"
+        : "No se pudo procesar el archivo. Verifica el archivo e intenta de nuevo.";
+    return res.status(400).json({ error: message });
+  }
+
+  return respondWithError(res, err, "unhandled");
 });
 
 // Server Startup

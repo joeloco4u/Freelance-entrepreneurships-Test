@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { getCategories } from "../services/categoryService";
 import { getActiveProducts } from "../services/productService";
 import type { CatalogProduct, Category } from "../types";
+import { getErrorMessage } from "../utils/errorMessage";
+import { ERROR_MESSAGES } from "../constants/errorMessages";
 
 export type SortOption = "name-asc" | "name-desc" | "price-asc" | "price-desc";
 const PAGE_SIZE = 12;
@@ -32,9 +34,7 @@ export function useCatalog() {
       .catch((err: unknown) => {
         if (cancelled) return;
         setError(
-          err instanceof Error
-            ? err.message
-            : "No se pudieron cargar los productos. Verifica tu conexión e intenta de nuevo.",
+          getErrorMessage(err, ERROR_MESSAGES.products.load),
         );
       })
       .finally(() => {
@@ -59,9 +59,7 @@ export function useCatalog() {
       setCategories(categoriesData);
     } catch (err: unknown) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudieron cargar los productos. Verifica tu conexión e intenta de nuevo.",
+        getErrorMessage(err, ERROR_MESSAGES.products.load),
       );
     } finally {
       setLoading(false);

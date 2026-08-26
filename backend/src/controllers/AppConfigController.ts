@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { supabaseAdmin } from "../db.js";
 import { getSheetsClient } from "../services/googleSheetsConfig.js";
 import { setAppConfigValue } from "../services/appConfigStore.js";
+import { respondWithError } from "../utils/errors.js";
 
 export interface AppConfig {
   key: string;
@@ -24,10 +25,9 @@ export async function getAppConfig(_req: Request, res: Response) {
 
     res.status(200).json(config);
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Error al consultar la configuración de la aplicación";
-    console.error("Error al obtener configuración:", message);
-    res.status(500).json({ error: `Error al obtener la configuración: ${message}` });
+    respondWithError(res, error, "getAppConfig", {
+      fallback: "No se pudo cargar la configuración. Intenta de nuevo más tarde.",
+    });
   }
 }
 
@@ -54,10 +54,9 @@ export async function saveAppConfig(req: Request, res: Response) {
 
     res.status(200).json({ message: "Configuración guardada" });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Error al guardar la configuración en la base de datos";
-    console.error("Error al guardar configuración:", message);
-    res.status(500).json({ error: `Error al guardar la configuración: ${message}` });
+    respondWithError(res, error, "saveAppConfig", {
+      fallback: "No se pudo guardar la configuración. Intenta de nuevo más tarde.",
+    });
   }
 }
 
@@ -83,9 +82,9 @@ export async function getAvailableSheets(req: Request, res: Response) {
 
     res.status(200).json({ sheets: sheetNames || [] });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Error al conectar con la API de Google Sheets";
-    console.error("Error al obtener hojas:", message);
-    res.status(500).json({ error: `Error al obtener las hojas de cálculo: ${message}` });
+    respondWithError(res, error, "getAvailableSheets", {
+      fallback:
+        "No se pudieron obtener las hojas. Verifica el ID de la hoja de cálculo e intenta de nuevo.",
+    });
   }
 }

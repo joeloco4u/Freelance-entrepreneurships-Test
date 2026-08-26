@@ -1,4 +1,3 @@
-import { isAxiosError } from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import {
@@ -8,6 +7,8 @@ import {
   updateUser,
 } from "../services/usersService";
 import type { PublicUser } from "../types";
+import { getErrorMessage } from "../utils/errorMessage";
+import { ERROR_MESSAGES } from "../constants/errorMessages";
 
 export function useSystemUsers() {
   const [users, setUsers] = useState<PublicUser[]>([]);
@@ -26,7 +27,7 @@ export function useSystemUsers() {
       setUsers(data);
     } catch (error) {
       console.error("Error al cargar usuarios", error);
-      const errorMessage = error instanceof Error ? error.message : "No se pudieron cargar los usuarios. Verifica tu conexión e intenta de nuevo.";
+      const errorMessage = getErrorMessage(error, ERROR_MESSAGES.users.load);
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -44,7 +45,7 @@ export function useSystemUsers() {
       .catch((error) => {
         if (cancelled) return;
         console.error("Error al cargar usuarios", error);
-        const errorMessage = error instanceof Error ? error.message : "No se pudieron cargar los usuarios. Verifica tu conexión e intenta de nuevo.";
+        const errorMessage = getErrorMessage(error, ERROR_MESSAGES.users.load);
         toast.error(errorMessage);
       })
       .finally(() => {
@@ -79,7 +80,7 @@ export function useSystemUsers() {
       setIsDeleteModalOpen(false);
       toast.success("Usuario eliminado exitosamente");
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "No se pudo eliminar el usuario. Verifica que no tenga datos asociados.";
+      const errorMessage = getErrorMessage(error, ERROR_MESSAGES.users.delete);
       toast.error(errorMessage);
       console.error("Error al eliminar usuario", error);
     } finally {
@@ -110,17 +111,7 @@ export function useSystemUsers() {
       setIsModalOpen(false);
       setEditingUser(null);
     } catch (error) {
-      let errorMessage = "Error al procesar la solicitud";
-
-      if (isAxiosError(error)) {
-        // TypeScript ahora sabe que 'error' es un AxiosError
-        errorMessage = error.response?.data?.error || error.message;
-      } else if (error instanceof Error) {
-        // Para errores genéricos de JavaScript
-        errorMessage = error.message;
-      }
-
-      toast.error(errorMessage);
+      toast.error(getErrorMessage(error, ERROR_MESSAGES.users.request));
     } finally {
       setLoading(false);
     }

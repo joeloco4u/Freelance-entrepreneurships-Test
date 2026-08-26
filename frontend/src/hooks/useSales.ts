@@ -4,6 +4,8 @@ import {
   getSalesByEntrepreneurship,
 } from "../services/saleService";
 import type { DateRange, EntrepreneurshipSale } from "../types";
+import { getErrorMessage } from "../utils/errorMessage";
+import { ERROR_MESSAGES } from "../constants/errorMessages";
 
 export function useSales(entrepreneurshipId?: string) {
   const [sales, setSales] = useState<EntrepreneurshipSale[]>([]);
@@ -30,7 +32,7 @@ export function useSales(entrepreneurshipId?: string) {
       } catch (error) {
         if (!cancelled) {
           console.error("Error fetching sales:", error);
-          const errorMessage = error instanceof Error ? error.message : "Error al cargar las ventas. Intenta de nuevo más tarde.";
+          const errorMessage = getErrorMessage(error, ERROR_MESSAGES.sales.load);
           toast.error(errorMessage);
         }
       } finally {
@@ -54,7 +56,7 @@ export function useSales(entrepreneurshipId?: string) {
       setSales(data);
     } catch (error) {
       console.error("Error fetching sales:", error);
-      const errorMessage = error instanceof Error ? error.message : "Error al cargar las ventas. Intenta de nuevo más tarde.";
+      const errorMessage = getErrorMessage(error, ERROR_MESSAGES.sales.load);
       toast.error(errorMessage);
     } finally {
       setLoading(false);

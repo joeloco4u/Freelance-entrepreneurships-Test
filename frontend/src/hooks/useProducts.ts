@@ -17,6 +17,8 @@ import type {
   EntrepreneurshipProduct,
   ProductInput,
 } from "../types";
+import { getErrorMessage } from "../utils/errorMessage";
+import { ERROR_MESSAGES } from "../constants/errorMessages";
 
 function isComposedInput(
   data: ProductInput | ComposedProductInput,
@@ -58,9 +60,7 @@ export function useProducts(entrepreneurshipId?: string) {
     } catch (error) {
       console.error(error);
       const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "No se pudieron cargar los productos. Verifica tu conexión e intenta de nuevo.";
+        getErrorMessage(error, ERROR_MESSAGES.products.load);
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -81,9 +81,7 @@ export function useProducts(entrepreneurshipId?: string) {
         if (!cancelled) {
           console.error(error);
           const errorMessage =
-            error instanceof Error
-              ? error.message
-              : "No se pudieron cargar los productos. Verifica tu conexión e intenta de nuevo.";
+            getErrorMessage(error, ERROR_MESSAGES.products.load);
           toast.error(errorMessage);
         }
       } finally {
@@ -128,9 +126,7 @@ export function useProducts(entrepreneurshipId?: string) {
     } catch (error) {
       console.error(error);
       const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Error al guardar el producto. Verifica los datos e intenta de nuevo.";
+        getErrorMessage(error, ERROR_MESSAGES.products.save);
       toast.error(errorMessage);
     } finally {
       setIsSaving(false);
@@ -162,6 +158,10 @@ export function useProducts(entrepreneurshipId?: string) {
             },
           };
         });
+      })
+      .catch((error: unknown) => {
+        console.error("[useProducts] getComposedProductById:", error);
+        toast.error(getErrorMessage(error, ERROR_MESSAGES.products.loadCombo));
       });
     }
   }, []);
@@ -190,9 +190,7 @@ export function useProducts(entrepreneurshipId?: string) {
       closeDeleteModal();
     } catch (error) {
       const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "No se pudo eliminar el producto. Intenta de nuevo más tarde.";
+        getErrorMessage(error, ERROR_MESSAGES.products.delete);
       toast.error(errorMessage);
     } finally {
       setIsSaving(false);

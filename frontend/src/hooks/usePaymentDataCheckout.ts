@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CatalogProduct, EntrepreneurPaymentData, PaymentMethod } from "../types";
 import { getPaymentDataByProducts } from "../services/paymentDataService";
+import { getErrorMessage } from "../utils/errorMessage";
+import { ERROR_MESSAGES } from "../constants/errorMessages";
 
 interface UsePaymentDataCheckoutProps {
   cartEntries: { product: CatalogProduct; qty: number }[];
@@ -52,7 +54,7 @@ export function usePaymentDataCheckout({
       } catch (err) {
         if (cancelled) return;
         console.error("Error fetching payment data:", err);
-        setError(err instanceof Error ? err.message : "Error al cargar datos de pago");
+        setError(getErrorMessage(err, ERROR_MESSAGES.paymentData.load));
         setPaymentData([]);
       } finally {
         if (!cancelled) setLoading(false);

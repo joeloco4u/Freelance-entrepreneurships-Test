@@ -9,6 +9,8 @@ import {
   type EntrepreneurSummary,
   type GlobalSale,
 } from "../types";
+import { getErrorMessage } from "../utils/errorMessage";
+import { ERROR_MESSAGES } from "../constants/errorMessages";
 
 /**
  * @param enabled - Controla si el hook debe realizar la petición a la API.
@@ -41,15 +43,12 @@ export function useAdminData(enabled: boolean = true) {
         const data = await getAllSales();
         setSales(data);
       } catch (err: unknown) {
-        if (err instanceof AppError) {
-          if (err.status !== 403) {
-            toast.error(err.message);
-          }
-          console.error(`[${err.status}] ${err.message}`);
-        } else {
-          const errorMessage = err instanceof Error ? err.message : "Error al cargar los datos del panel. Verifica tu conexión e intenta de nuevo.";
+        const errorMessage = getErrorMessage(err, ERROR_MESSAGES.admin.dashboard);
+        // El 403 es esperado para roles sin acceso al panel: no molestamos al usuario.
+        if (!(err instanceof AppError) || err.status !== 403) {
           toast.error(errorMessage);
         }
+        console.error("[useAdminData] fetchSales:", err);
       } finally {
         setLoading(false);
       }
@@ -92,7 +91,7 @@ export function useAdminData(enabled: boolean = true) {
       setIsModalOpen(false);
     } catch (error: unknown) {
       console.error("Error al procesar nómina:", error);
-      const errorMessage = error instanceof Error ? error.message : "Error al procesar la nómina. Verifica tu conexión e intenta de nuevo.";
+      const errorMessage = getErrorMessage(error, ERROR_MESSAGES.sales.payroll);
       toast.error(errorMessage);
     } finally {
       setProcessingIds((prev) => prev.filter((id) => !saleIds.includes(id)));

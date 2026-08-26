@@ -12,7 +12,7 @@ export function authorize(...allowedRoles: string[]) {
 
     if (!hasAccess) {
       return res.status(403).json({
-        error: `Acceso prohibido: se requiere uno de los siguientes roles: ${allowedRoles.join(", ")}`,
+        error: "No tienes permisos para realizar esta acción.",
       });
     }
 

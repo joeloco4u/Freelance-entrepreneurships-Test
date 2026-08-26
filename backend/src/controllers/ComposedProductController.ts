@@ -1,6 +1,16 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../db.js";
 import { uploadProductImage } from "../services/uploadImageService.js";
+import { respondWithError } from "../utils/errors.js";
+
+const DELETE_OPTIONS = {
+  messages: {
+    // foreign_key_violation: the combo is referenced by sale_items
+    "23503":
+      "No puedes eliminar este combo porque ya tiene ventas registradas. Desactívalo en su lugar.",
+  },
+  fallback: "No se pudo eliminar el combo. Intenta de nuevo más tarde.",
+};
 
 // Obtener todos los productos compuestos de un emprendimiento (con stock calculado)
 export async function getComposedProductsByEntrepreneurship(
@@ -35,7 +45,10 @@ export async function getComposedProductsByEntrepreneurship(
     .eq("entrepreneurship_id", entrepreneurship_id)
     .eq("is_composed", true);
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error)
+    return respondWithError(res, error, "getComposedProducts", {
+      fallback: "No se pudieron cargar los combos. Intenta de nuevo más tarde.",
+    });
 
   const enriched = await enrichComposedStock(data);
   res.status(200).json(enriched);
@@ -154,12 +167,11 @@ export async function createComposedProduct(req: Request, res: Response) {
     const enriched = await enrichComposedStock([newProduct]);
     return res.status(201).json(enriched[0]);
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Error desconocido al crear producto compuesto";
-    console.error("[createComposedProduct Error]:", message);
-    return res.status(400).json({ error: message });
+    return respondWithError(res, error, "createComposedProduct", {
+      status: 400,
+      fallback:
+        "No se pudo crear el combo. Verifica los datos e intenta de nuevo.",
+    });
   }
 }
 
@@ -261,10 +273,11 @@ export async function updateComposedProduct(req: Request, res: Response) {
     const enriched = await enrichComposedStock([updatedProduct]);
     return res.status(200).json(enriched[0]);
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Error al actualizar producto compuesto";
-    console.error("[updateComposedProduct Error]:", message);
-    return res.status(400).json({ error: message });
+    return respondWithError(res, error, "updateComposedProduct", {
+      status: 400,
+      fallback:
+        "No se pudo actualizar el combo. Verifica los datos e intenta de nuevo.",
+    });
   }
 }
 
@@ -283,10 +296,11 @@ export async function deleteComposedProduct(req: Request, res: Response) {
       .eq("id", id)
       .eq("is_composed", true);
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error)
+      return respondWithError(res, error, "deleteComposedProduct", DELETE_OPTIONS);
     res.status(200).json({ message: "Producto compuesto eliminado correctamente" });
-  } catch (_error) {
-    res.status(500).json({ error: "Error interno" });
+  } catch (error) {
+    return respondWithError(res, error, "deleteComposedProduct", DELETE_OPTIONS);
   }
 }
 

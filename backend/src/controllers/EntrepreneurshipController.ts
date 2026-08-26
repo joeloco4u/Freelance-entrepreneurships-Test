@@ -1,5 +1,18 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../db.js";
+import { respondWithError } from "../utils/errors.js";
+
+const LOAD_ERROR =
+  "No se pudieron cargar los emprendimientos. Intenta de nuevo más tarde.";
+
+const DELETE_OPTIONS = {
+  messages: {
+    // foreign_key_violation: products or sales still reference it
+    "23503":
+      "No puedes eliminar este emprendimiento porque tiene productos o ventas asociadas.",
+  },
+  fallback: "No se pudo eliminar el emprendimiento. Intenta de nuevo más tarde.",
+};
 
 // [PÚBLICO] Obtener todos los emprendimientos activos (para el catálogo)
 export async function getActiveEntrepreneurships(_req: Request, res: Response) {
@@ -8,7 +21,10 @@ export async function getActiveEntrepreneurships(_req: Request, res: Response) {
     .select("*, users(id, name, email)")
     .eq("is_active", true);
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error)
+    return respondWithError(res, error, "getActiveEntrepreneurships", {
+      fallback: LOAD_ERROR,
+    });
   res.status(200).json(data);
 }
 
@@ -18,7 +34,10 @@ export async function getAllEntrepreneurships(_req: Request, res: Response) {
     .from("entrepreneurships")
     .select("*, users(id, name, email)");
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error)
+    return respondWithError(res, error, "getAllEntrepreneurships", {
+      fallback: LOAD_ERROR,
+    });
   res.status(200).json(data);
 }
 
@@ -68,9 +87,10 @@ export async function getMyEntrepreneurships(req: Request, res: Response) {
 
     res.status(200).json(formattedData);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Error al consultar los emprendimientos del usuario";
-    console.error("Error al obtener emprendimientos:", message);
-    res.status(500).json({ error: `Error al cargar tus emprendimientos: ${message}` });
+    respondWithError(res, error, "getMyEntrepreneurships", {
+      fallback:
+        "No se pudieron cargar tus emprendimientos. Intenta de nuevo más tarde.",
+    });
   }
 }
 
@@ -89,7 +109,12 @@ export async function createEntrepreneurship(req: Request, res: Response) {
     .select()
     .single();
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error)
+    return respondWithError(res, error, "createEntrepreneurship", {
+      status: 400,
+      fallback:
+        "No se pudo crear el emprendimiento. Verifica los datos e intenta de nuevo.",
+    });
   res.status(201).json(data);
 }
 
@@ -140,7 +165,12 @@ export async function updateEntrepreneurship(req: Request, res: Response) {
     .select()
     .single();
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error)
+    return respondWithError(res, error, "updateEntrepreneurship", {
+      status: 400,
+      fallback:
+        "No se pudo actualizar el emprendimiento. Verifica los datos e intenta de nuevo.",
+    });
   res
     .status(200)
     .json({ message: "Emprendimiento actualizado correctamente", data });
@@ -162,11 +192,10 @@ export async function deleteEntrepreneurship(req: Request, res: Response) {
       .delete()
       .eq("id", id);
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error)
+      return respondWithError(res, error, "deleteEntrepreneurship", DELETE_OPTIONS);
     res.status(200).json({ message: "Emprendimiento eliminado correctamente" });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Error al eliminar el emprendimiento de la base de datos";
-    console.error("Error al eliminar emprendimiento:", errorMessage);
-    res.status(500).json({ error: `No se pudo eliminar el emprendimiento: ${errorMessage}` });
+    respondWithError(res, error, "deleteEntrepreneurship", DELETE_OPTIONS);
   }
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import api from "../../../../config/api";
 import type { AppConfig, SheetOption } from "../../../../types";
+import { getErrorMessage } from "../../../../utils/errorMessage";
 
 interface UseSettingsReturn {
   config: AppConfig;
@@ -106,9 +107,7 @@ export function useSettings(): UseSettingsReturn {
       toast.success("Configuración guardada correctamente");
     } catch (err) {
       const errorMessage =
-        err instanceof Error
-          ? err.message
-          : "No se pudo guardar la configuración. Verifica tu conexión e intenta de nuevo.";
+        getErrorMessage(err, "No se pudo guardar la configuración. Verifica tu conexión e intenta de nuevo.");
       toast.error(errorMessage);
     } finally {
       setSaving(false);

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { getMyPaymentData, upsertPaymentData } from "../services/paymentDataService";
 import type { EntrepreneurPaymentData } from "../types";
+import { getErrorMessage } from "../utils/errorMessage";
+import { ERROR_MESSAGES } from "../constants/errorMessages";
 
 interface UsePaymentDataSettingsReturn {
   paymentData: EntrepreneurPaymentData[];
@@ -24,7 +26,7 @@ export function usePaymentDataSettings(): UsePaymentDataSettingsReturn {
         setPaymentData(data);
       } catch (err) {
         console.error("Error fetching payment data:", err);
-        setError(err instanceof Error ? err.message : "Error al cargar datos de pago");
+        setError(getErrorMessage(err, ERROR_MESSAGES.paymentData.load));
       } finally {
         setLoading(false);
       }
@@ -42,7 +44,7 @@ export function usePaymentDataSettings(): UsePaymentDataSettingsReturn {
       });
       toast.success("Datos de pago guardados correctamente");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error al guardar datos de pago";
+      const message = getErrorMessage(err, ERROR_MESSAGES.paymentData.save);
       toast.error(message);
     } finally {
       setSaving(false);

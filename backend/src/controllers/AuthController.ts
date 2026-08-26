@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import z from "zod";
 import { supabaseAdmin } from "../db.js";
+import { respondWithError } from "../utils/errors.js";
 import {
 	ACCOUNT_INVITE_SUBJECT,
 	accountInviteEmailHtml,
@@ -50,7 +51,10 @@ export async function SignupRequest(req: Request, res: Response) {
 			.order("created_at", { ascending: false });
 
 		if (existingError)
-			return res.status(400).json({ error: existingError.message });
+			return respondWithError(res, existingError, "SignupRequest.checkExisting", {
+				fallback:
+					"No se pudo procesar la solicitud. Intenta de nuevo más tarde.",
+			});
 
 		// Rows are ordered newest first, so find() returns the latest row per status.
 		const approvedRequest = existingRequests?.find(
@@ -113,7 +117,12 @@ export async function SignupRequest(req: Request, res: Response) {
 			},
 		]);
 
-		if (error) return res.status(400).json({ error: error.message });
+		if (error)
+			return respondWithError(res, error, "SignupRequest.insert", {
+				status: 400,
+				fallback:
+					"No se pudo enviar la solicitud. Verifica los datos e intenta de nuevo.",
+			});
 
 		const webhookUrl = process.env.SLACK_WEBHOOK_URL_IT;
 		if (webhookUrl) {
@@ -145,7 +154,10 @@ export async function GetPendingRequests(_req: Request, res: Response) {
 			.order("created_at", { ascending: false });
 
 		if (error) {
-			return res.status(400).json({ error: error.message });
+			return respondWithError(res, error, "GetPendingRequests", {
+				fallback:
+					"No se pudieron cargar las solicitudes. Intenta de nuevo más tarde.",
+			});
 		}
 
 		return res.status(200).json(data);
@@ -270,7 +282,11 @@ export async function RejectSignup(req: Request, res: Response) {
 			.single();
 
 		if (error) {
-			return res.status(400).json({ error: error.message });
+			return respondWithError(res, error, "RejectSignup", {
+				status: 400,
+				fallback:
+					"No se pudo rechazar la solicitud. Intenta de nuevo más tarde.",
+			});
 		}
 
 		if (!data) {

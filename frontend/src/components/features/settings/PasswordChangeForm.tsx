@@ -3,6 +3,7 @@ import { message } from "antd";
 import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "../../../config/supabaseClient";
+import { ERROR_MESSAGES } from "../../../constants/errorMessages";
 
 export function PasswordChangeForm() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -60,7 +61,8 @@ export function PasswordChangeForm() {
       });
 
       if (updateError) {
-        setError(updateError.message);
+        console.error("[PasswordChangeForm] updateUser:", updateError);
+        setError(ERROR_MESSAGES.auth.changePassword);
       } else {
         message.success(" Contraseña actualizada correctamente");
         setCurrentPassword("");

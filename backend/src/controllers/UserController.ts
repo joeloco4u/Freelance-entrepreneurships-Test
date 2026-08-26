@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../db.js";
+import { respondWithError } from "../utils/errors.js";
+import { logError } from "../utils/logger.js";
 
 export async function createSystemUser(req: Request, res: Response) {
   const { email, name, roles, departamento } = req.body;
@@ -47,8 +49,7 @@ export async function getPublicConsumers(_req: Request, res: Response) {
     if (error) throw error;
     res.status(200).json(data);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Error desconocido al consultar la base de datos";
-    console.error("Error al obtener consumidores:", errorMessage);
+    logError("getPublicConsumers", error);
     return res.status(500).json({
       error: "Error al obtener la lista de consumidores",
     });
@@ -89,9 +90,7 @@ export const getActiveSessionsCount = async (_req: Request, res: Response) => {
     // data contiene directamente el número retornado por la función
     return res.json({ count: data || 0 });
   } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Error al consultar la función RPC de Supabase";
-    console.error("Controlador IT Error:", errorMessage);
+    logError("getActiveSessionsCount", error);
 
     return res.status(500).json({
       error: "Error al obtener el conteo de sesiones activas",
@@ -182,13 +181,15 @@ export async function deleteUser(req: Request, res: Response) {
     const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
 
     if (error) {
-      return res.status(400).json({ error: error.message });
+      return respondWithError(res, error, "deleteUser", {
+        status: 400,
+        fallback: "No se pudo eliminar el usuario. Intenta de nuevo más tarde.",
+      });
     }
 
     res.status(200).json({ message: "Usuario eliminado correctamente" });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Error al procesar la eliminación en la base de datos";
-    console.error("Error al eliminar usuario:", errorMessage);
+    logError("deleteUser", error);
     return res.status(500).json({
       error: "No se pudo eliminar el usuario del sistema",
     });

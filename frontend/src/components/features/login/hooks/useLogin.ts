@@ -1,9 +1,10 @@
-import axios from "axios";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../../config/supabaseClient";
 import { loginUser } from "../../../../services/authService";
 import type { LoginFormType } from "../../../../types";
+import { getErrorMessage } from "../../../../utils/errorMessage";
+import { ERROR_MESSAGES } from "../../../../constants/errorMessages";
 
 export function useLogin() {
   const navigate = useNavigate();
@@ -53,18 +54,11 @@ export function useLogin() {
       navigate(targetPath, { replace: true });
     } catch (err: unknown) {
       console.error("Login error:", err);
-      let message = "Error al conectar con el servidor";
-
-      if (axios.isAxiosError(err)) {
-        const backendError = err.response?.data as { error?: string };
-        message = backendError?.error || err.message;
-      } else if (err instanceof Error) {
-        message = err.message;
-      }
+      const message = getErrorMessage(err, ERROR_MESSAGES.auth.login);
 
       setError(
         message === "Invalid login credentials"
-          ? "Correo o contraseña incorrectos"
+          ? ERROR_MESSAGES.auth.invalidCredentials
           : message,
       );
     } finally {

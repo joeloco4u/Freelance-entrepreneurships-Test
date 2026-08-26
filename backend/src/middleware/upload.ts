@@ -1,4 +1,5 @@
 import multer from "multer";
+import { AppError } from "../utils/errors.js";
 
 // Configuramos el almacenamiento en memoria (Memory Storage)
 // para que el archivo esté disponible en req.file.buffer
@@ -14,7 +15,9 @@ const upload = multer({
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
     } else {
-      cb(new Error("Solo se permiten archivos de imagen (jpg, png, etc.)"));
+      cb(
+        new AppError("Solo se permiten archivos de imagen (jpg, png, etc.).", 400),
+      );
     }
   },
 });

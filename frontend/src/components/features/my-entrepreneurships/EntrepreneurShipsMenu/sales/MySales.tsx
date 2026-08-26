@@ -16,6 +16,8 @@ import SalesEmptyState from "./SalesEmptyState";
 import SalesFilters from "./SalesFilters";
 import SalesSummary from "./SalesSummary";
 import SalesTableDesktop from "./SalesTableDesktop";
+import { getErrorMessage } from "../../../../../utils/errorMessage";
+import { ERROR_MESSAGES } from "../../../../../constants/errorMessages";
 
 export default function MySales() {
   const { id } = useParams<{ id: string }>();
@@ -123,7 +125,7 @@ export default function MySales() {
       setIsBulkModalOpen(false);
     } catch (error: unknown) {
       console.error("Error al procesar reembolsos masivos:", error);
-      const errorMessage = error instanceof Error ? error.message : "Error al procesar los reembolsos. Verifica tu conexión e intenta de nuevo.";
+      const errorMessage = getErrorMessage(error, ERROR_MESSAGES.sales.refundBatch);
       toast.error(errorMessage);
     } finally {
       setProcessingIds((prev) => prev.filter((id) => !idsToBulkRefund.includes(id)));
@@ -153,9 +155,7 @@ export default function MySales() {
         refetch();
       } catch (error) {
         const errorMessage =
-          error instanceof Error
-            ? error.message
-            : "Error al procesar el pago";
+          getErrorMessage(error, ERROR_MESSAGES.sales.payment);
         toast.error(errorMessage);
       } finally {
         setIsProcessingPayment(false);
@@ -196,9 +196,7 @@ export default function MySales() {
         refetch();
       } catch (error) {
         const errorMessage =
-          error instanceof Error
-            ? error.message
-            : "Error al procesar el reembolso";
+          getErrorMessage(error, ERROR_MESSAGES.sales.refund);
         toast.error(errorMessage);
       } finally {
         setIsRefunding(false);

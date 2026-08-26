@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getPendingRequests } from "../services/authService";
 import { getActiveSessions, getAllUsers } from "../services/usersService";
+import { getErrorMessage } from "../utils/errorMessage";
 
 interface ITMetrics {
   totalUsers: number;
@@ -40,9 +41,7 @@ export function useITData(enabled: boolean) {
       });
     } catch (err: unknown) {
       const msg =
-        err instanceof Error
-          ? err.message
-          : "No se pudieron cargar las métricas del sistema. Verifica tu conexión e intenta de nuevo.";
+        getErrorMessage(err, "No se pudieron cargar las métricas del sistema. Verifica tu conexión e intenta de nuevo.");
       setError(msg);
       console.error("[useITData] Error:", msg);
     } finally {
@@ -73,9 +72,7 @@ export function useITData(enabled: boolean) {
       .catch((err: unknown) => {
         if (cancelled) return;
         const msg =
-          err instanceof Error
-            ? err.message
-            : "No se pudieron cargar las métricas del sistema. Verifica tu conexión e intenta de nuevo.";
+          getErrorMessage(err, "No se pudieron cargar las métricas del sistema. Verifica tu conexión e intenta de nuevo.");
         setError(msg);
         console.error("[useITData] Error:", msg);
       })
