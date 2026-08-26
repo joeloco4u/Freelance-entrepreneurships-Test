@@ -3,6 +3,8 @@ import { createSale } from "../services/saleService";
 import type { CatalogProduct, Consumer } from "../types";
 import { getConsumersList } from "../services/usersService";
 import { usePaymentDataCheckout } from "./usePaymentDataCheckout";
+import { getErrorMessage } from "../utils/errorMessage";
+import { ERROR_MESSAGES } from "../constants/errorMessages";
 
 export type ModalStatus = "idle" | "loading" | "success" | "error";
 
@@ -46,9 +48,7 @@ export function useCheckout({
         setConsumers(data as Consumer[]);
       } catch (err: unknown) {
         setError(
-          err instanceof Error
-            ? err.message
-            : "No se pudieron cargar los compradores. Verifica tu conexión e intenta de nuevo.",
+          getErrorMessage(err, "No se pudieron cargar los compradores. Verifica tu conexión e intenta de nuevo."),
         );
       } finally {
         setLoadingCons(false);
@@ -107,9 +107,7 @@ export function useCheckout({
     } catch (err: unknown) {
       // Capturamos el error del backend (ej: falta de stock)
       setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo registrar la compra. Verifica el stock disponible e intenta de nuevo.",
+        getErrorMessage(err, ERROR_MESSAGES.sales.checkout),
       );
       setStatus("error");
     }

@@ -1,8 +1,21 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../db.js";
+import { respondWithError } from "../utils/errors.js";
 import { uploadProductImage } from "../services/uploadImageService.js";
 import { checkAndNotifyLowStock } from "../services/slackService.js";
 import { enrichComposedStock } from "./ComposedProductController.js";
+
+const PRODUCTS_LOAD_ERROR =
+  "No se pudieron cargar los productos. Intenta de nuevo más tarde.";
+
+const DELETE_OPTIONS = {
+  messages: {
+    // foreign_key_violation: the product is referenced by sale_items
+    "23503":
+      "No puedes eliminar este producto porque ya tiene ventas registradas. Desactívalo en su lugar.",
+  },
+  fallback: "No se pudo eliminar el producto. Intenta de nuevo más tarde.",
+};
 
 // [PÚBLICO] Obtener todos los productos activos de emprendimientos activos
 export async function getActiveProducts(_req: Request, res: Response) {
@@ -12,7 +25,10 @@ export async function getActiveProducts(_req: Request, res: Response) {
     .eq("is_active", true)
     .eq("entrepreneurships.is_active", true);
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error)
+    return respondWithError(res, error, "getActiveProducts", {
+      fallback: PRODUCTS_LOAD_ERROR,
+    });
 
   const enriched = await enrichComposedStock(data);
   const       result = enriched.map((p) => ({
@@ -29,7 +45,10 @@ export async function getAllProducts(_req: Request, res: Response) {
     .from("products")
     .select("*, entrepreneurships(id, name)");
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error)
+    return respondWithError(res, error, "getAllProducts", {
+      fallback: PRODUCTS_LOAD_ERROR,
+    });
 
   const enriched = await enrichComposedStock(data);
   const result = enriched.map((p) => ({
@@ -72,7 +91,10 @@ export async function getProductsByEntrepreneurship(
     .select("*")
     .eq("entrepreneurship_id", entrepreneurship_id);
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error)
+    return respondWithError(res, error, "getProductsByEntrepreneurship", {
+      fallback: PRODUCTS_LOAD_ERROR,
+    });
 
   const enriched = await enrichComposedStock(data);
   const result = enriched.map((p) => ({
@@ -180,13 +202,11 @@ export async function createProduct(req: Request, res: Response) {
     // 6. Respuesta exitosa
     return res.status(201).json(newProduct);
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Error desconocido al crear producto";
-    console.error("[createProduct Error]:", message);
-
-    return res.status(400).json({ error: message });
+    return respondWithError(res, error, "createProduct", {
+      status: 400,
+      fallback:
+        "No se pudo crear el producto. Verifica los datos e intenta de nuevo.",
+    });
   }
 }
 
@@ -286,10 +306,11 @@ export async function updateProduct(req: Request, res: Response) {
       data: updatedProduct,
     });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Error al actualizar producto";
-    console.error("[updateProduct Error]:", message);
-    return res.status(400).json({ error: message });
+    return respondWithError(res, error, "updateProduct", {
+      status: 400,
+      fallback:
+        "No se pudo actualizar el producto. Verifica los datos e intenta de nuevo.",
+    });
   }
 }
 
@@ -307,9 +328,10 @@ export async function deleteProduct(req: Request, res: Response) {
       .delete()
       .eq("id", id);
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error)
+      return respondWithError(res, error, "deleteProduct", DELETE_OPTIONS);
     res.status(200).json({ message: "Producto eliminado correctamente" });
-  } catch (_error) {
-    res.status(500).json({ error: "Error interno" });
+  } catch (error) {
+    return respondWithError(res, error, "deleteProduct", DELETE_OPTIONS);
   }
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { requestPasswordRecovery } from "../services/authService";
+import { getErrorMessage } from "../utils/errorMessage";
 
 export function useForgotPassword() {
   const [email, setEmail] = useState("");
@@ -19,9 +20,7 @@ export function useForgotPassword() {
       setSuccess(true);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo enviar el correo de recuperación. Verifica tu conexión e intenta de nuevo.",
+        getErrorMessage(err, "No se pudo enviar el correo de recuperación. Verifica tu conexión e intenta de nuevo."),
       );
     } finally {
       setLoading(false);

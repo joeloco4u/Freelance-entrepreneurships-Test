@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../config/supabaseClient";
 import { updatePassword } from "../services/authService";
+import { getErrorMessage } from "../utils/errorMessage";
 
 export function useResetPassword() {
   const navigate = useNavigate();
@@ -39,9 +40,7 @@ export function useResetPassword() {
       setTimeout(() => navigate("/login"), 3000);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo actualizar la contraseña. Intenta de nuevo más tarde.",
+        getErrorMessage(err, "No se pudo actualizar la contraseña. Intenta de nuevo más tarde."),
       );
     } finally {
       setLoading(false);

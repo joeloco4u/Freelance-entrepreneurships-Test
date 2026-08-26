@@ -3,6 +3,7 @@ import { toast } from "react-toastify/unstyled";
 import { supabase } from "../config/supabaseClient";
 import { getConsumerPurchases } from "../services/saleService";
 import type { ConsumerSale, DateRange } from "../types";
+import { getErrorMessage } from "../utils/errorMessage";
 
 function getSaleStatus(sale: ConsumerSale) {
   if (sale.refunded || sale.sale_items.every((item) => item.refunded)) return "refunded";
@@ -39,9 +40,7 @@ export const useConsumerSales = () => {
       setSales(data);
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "No se pudieron cargar tus compras. Verifica tu conexión e intenta de nuevo.",
+        getErrorMessage(error, "No se pudieron cargar tus compras. Verifica tu conexión e intenta de nuevo."),
       );
     } finally {
       setLoading(false);
@@ -121,9 +120,7 @@ export const useConsumerSales = () => {
       .catch((error) => {
         if (cancelled) return;
         toast.error(
-          error instanceof Error
-            ? error.message
-            : "No se pudieron cargar tus compras. Verifica tu conexión e intenta de nuevo.",
+          getErrorMessage(error, "No se pudieron cargar tus compras. Verifica tu conexión e intenta de nuevo."),
         );
       })
       .finally(() => {

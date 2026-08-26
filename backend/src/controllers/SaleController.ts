@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../db.js";
+import { respondWithError, toPublicError } from "../utils/errors.js";
+import { logError } from "../utils/logger.js";
 import {
   consumerPurchaseTemplate,
   entrepreneurSaleTemplate,
@@ -58,6 +60,14 @@ interface SellerGroup {
 }
 
 // [ADMIN] Obtener todas las ventas
+const DELETE_SALE_OPTIONS = {
+  messages: {
+    // foreign_key_violation: other records still reference the sale
+    "23503": "No puedes eliminar esta venta porque tiene información asociada.",
+  },
+  fallback: "No se pudo eliminar la venta. Intenta de nuevo más tarde.",
+};
+
 export async function getAllSales(_req: Request, res: Response) {
   const { data, error } = await supabaseAdmin
     .from("sales")
@@ -674,12 +684,10 @@ export async function createSale(req: Request, res: Response) {
 
     res.status(201).json(sale);
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Error al insertar la venta o sus detalles en la base de datos";
-    console.error("Error al crear venta:", message);
-    res.status(500).json({ error: `Error al procesar la compra: ${message}` });
+    respondWithError(res, error, "createSale", {
+      fallback:
+        "No se pudo registrar la compra. Verifica el stock disponible e intenta de nuevo.",
+    });
   }
 }
 
@@ -779,10 +787,9 @@ export async function processSaleItems(req: Request, res: Response) {
       processed: processIds.length,
     });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Error al procesar los items";
-    console.error("[SaleController] Error en processSaleItems:", message);
-    res.status(500).json({ error: `Error al procesar los items: ${message}` });
+    respondWithError(res, error, "processSaleItems", {
+      fallback: "No se pudieron procesar los items. Intenta de nuevo más tarde.",
+    });
   }
 }
 
@@ -830,7 +837,11 @@ export async function updatePayrollStatus(req: Request, res: Response) {
     )
     .single();
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error)
+    return respondWithError(res, error, "updatePayrollStatus", {
+      status: 400,
+      fallback: "No se pudo procesar el pago. Intenta de nuevo más tarde.",
+    });
 
   const saleData = data as unknown as {
     users: { name: string; email: string } | { name: string; email: string }[];
@@ -949,18 +960,14 @@ export async function deleteSale(req: Request, res: Response) {
       .delete()
       .eq("id", id);
 
-    if (saleError) return res.status(400).json({ error: saleError.message });
+    if (saleError)
+      return respondWithError(res, saleError, "deleteSale", DELETE_SALE_OPTIONS);
 
     res.status(200).json({
       message: "Venta y sus detalles eliminados correctamente",
     });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Error al eliminar los registros relacionados de la venta";
-    console.error("Error al eliminar venta:", message);
-    res.status(500).json({ error: `Error al eliminar la venta: ${message}` });
+    respondWithError(res, error, "deleteSale", DELETE_SALE_OPTIONS);
   }
 }
 
@@ -1297,7 +1304,10 @@ export async function updatePayrollStatusBatch(req: Request, res: Response) {
         await processSinglePayroll(saleId);
         results.push({ saleId, success: true });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Error desconocido";
+        logError("processSinglePayroll", err, { saleId });
+        const { message } = toPublicError(err, {
+          fallback: "No se pudo procesar esta venta.",
+        });
         results.push({ saleId, success: false, error: message });
       }
     }
@@ -1315,12 +1325,9 @@ res.status(200).json({
       results,
     });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Error al actualizar el estado de procesamiento de las ventas";
-    console.error("Error al procesar nómina batch:", message);
-    res.status(500).json({ error: `Error al procesar la nómina: ${message}` });
+    respondWithError(res, error, "updatePayrollStatusBatch", {
+      fallback: "No se pudo procesar la nómina. Intenta de nuevo más tarde.",
+    });
   }
 }
 
@@ -1360,7 +1367,10 @@ export async function refundSaleBatch(req: Request, res: Response) {
         results.push({ saleId, success: true, type: result.type });
         successNotifications.push(result);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Error desconocido";
+        logError("processSingleRefund", err, { saleId });
+        const { message } = toPublicError(err, {
+          fallback: "No se pudo reembolsar esta venta.",
+        });
         results.push({ saleId, success: false, error: message });
       }
     }
@@ -1403,10 +1413,10 @@ export async function refundSaleBatch(req: Request, res: Response) {
       results,
     });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Error al procesar los reembolsos";
-    console.error("Error al procesar reembolsos batch:", message);
-    res.status(500).json({ error: `Error al procesar los reembolsos: ${message}` });
+    respondWithError(res, error, "refundSaleBatch", {
+      fallback:
+        "No se pudieron procesar los reembolsos. Intenta de nuevo más tarde.",
+    });
   }
 }
 

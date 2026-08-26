@@ -1,6 +1,12 @@
 import axios from "axios";
 import { type ApiErrorResponse, AppError } from "../types";
 import { supabase } from "./supabaseClient"; // Importamos tu cliente existente
+import { looksInternal } from "../utils/errorMessage";
+import {
+  GENERIC_ERROR,
+  NETWORK_ERROR,
+  STATUS_MESSAGES,
+} from "../constants/errorMessages";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -36,11 +42,26 @@ api.interceptors.response.use(
       // Tipamos la respuesta del servidor
       const serverData = error.response?.data as ApiErrorResponse | undefined;
       status = error.response?.status;
+
+      if (!error.response) {
+        // Sin respuesta: el servidor no respondió o no hay conexión
+        customMessage = NETWORK_ERROR;
+      } else {
+        customMessage =
+          serverData?.error ??
+          serverData?.message ??
+          error.message ??
+          customMessage;
+      }
+    }
+
+    // Defensa en profundidad: nunca mostramos detalles internos al usuario,
+    // aunque un endpoint los devuelva por error. El detalle real queda en consola.
+    if (looksInternal(customMessage)) {
+      console.error("[api] Respuesta con detalle interno:", customMessage);
       customMessage =
-        serverData?.error ??
-        serverData?.message ??
-        error.message ??
-        customMessage;
+        (status !== undefined ? STATUS_MESSAGES[status] : undefined) ??
+        GENERIC_ERROR;
     }
 
     // Retornamos nuestra clase personalizada en lugar de any

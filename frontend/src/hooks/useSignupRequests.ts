@@ -1,4 +1,3 @@
-import { message } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import {
@@ -7,6 +6,7 @@ import {
   rejectAccessRequest,
 } from "../services/authService";
 import type { SignupRequest } from "../types";
+import { getErrorMessage } from "../utils/errorMessage";
 
 export const useSignupRequests = () => {
   const [requests, setRequests] = useState<SignupRequest[]>([]);
@@ -82,10 +82,7 @@ export const useSignupRequests = () => {
       setRequests((prev) => prev.filter((req) => req.id !== id));
     } catch (error) {
       const errorMsg =
-        error instanceof Error
-          ? error.message
-          : "No se pudo aprobar la solicitud. Verifica tu conexión e intenta de nuevo.";
-      message.error(errorMsg);
+        getErrorMessage(error, "No se pudo aprobar la solicitud. Verifica tu conexión e intenta de nuevo.");
       toast.error(errorMsg);
     } finally {
       setProcessingId(null);
@@ -115,9 +112,7 @@ export const useSignupRequests = () => {
       toast.success("Solicitud rechazada exitosamente");
     } catch (error) {
       const errorMsg =
-        error instanceof Error
-          ? error.message
-          : "No se pudo rechazar la solicitud. Verifica tu conexión e intenta de nuevo.";
+        getErrorMessage(error, "No se pudo rechazar la solicitud. Verifica tu conexión e intenta de nuevo.");
       toast.error(errorMsg);
     } finally {
       setIsRejecting(false);

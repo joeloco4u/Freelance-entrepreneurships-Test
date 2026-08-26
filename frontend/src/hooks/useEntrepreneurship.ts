@@ -7,6 +7,8 @@ import {
   updateEntrepreneurship,
 } from "../services/entrepreneurshipService";
 import type { Entrepreneurship } from "../types";
+import { getErrorMessage } from "../utils/errorMessage";
+import { ERROR_MESSAGES } from "../constants/errorMessages";
 
 export function useEntrepreneurships() {
   const [items, setItems] = useState<Entrepreneurship[]>([]);
@@ -39,7 +41,7 @@ export function useEntrepreneurships() {
       const data = await getMyEntrepreneurships();
       setItems(data);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "No se pudieron cargar los emprendimientos. Verifica tu conexión e intenta de nuevo.";
+      const errorMessage = getErrorMessage(error, ERROR_MESSAGES.entrepreneurships.load);
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -56,7 +58,7 @@ export function useEntrepreneurships() {
       })
       .catch((error) => {
         if (cancelled) return;
-        const errorMessage = error instanceof Error ? error.message : "No se pudieron cargar los emprendimientos. Verifica tu conexión e intenta de nuevo.";
+        const errorMessage = getErrorMessage(error, ERROR_MESSAGES.entrepreneurships.load);
         toast.error(errorMessage);
       })
       .finally(() => {
@@ -90,7 +92,7 @@ export function useEntrepreneurships() {
       await fetchData(); // Refrescar lista
       closeDeleteModal();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "No se pudo eliminar el emprendimiento. Verifica que no tenga productos asociados.";
+      const errorMessage = getErrorMessage(error, ERROR_MESSAGES.entrepreneurships.delete);
       toast.error(errorMessage);
     } finally {
       setIsDeleting(false);
@@ -121,7 +123,7 @@ export function useEntrepreneurships() {
       closeFormModal();
     } catch (error) {
       console.error(error);
-      const errorMessage = error instanceof Error ? error.message : "Error al guardar el emprendimiento. Verifica los datos e intenta de nuevo.";
+      const errorMessage = getErrorMessage(error, ERROR_MESSAGES.entrepreneurships.save);
       toast.error(errorMessage);
     } finally {
       setIsSaving(false);

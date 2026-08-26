@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { requestAccess } from "../../../../services/authService";
 import type { RegisterForm, UserRole } from "../../../../types";
+import { getErrorMessage } from "../../../../utils/errorMessage";
 
 export function useRegister() {
   const [form, setForm] = useState<RegisterForm>({
@@ -35,9 +36,7 @@ export function useRegister() {
       setSuccess(true);
     } catch (err: unknown) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo enviar la solicitud. Verifica tu conexión e intenta de nuevo.",
+        getErrorMessage(err, "No se pudo enviar la solicitud. Verifica tu conexión e intenta de nuevo."),
       );
     } finally {
       setLoading(false);
