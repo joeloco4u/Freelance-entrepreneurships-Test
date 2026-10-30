@@ -1,0 +1,17 @@
+{
+	"name": "freelance-entrepreneur-monorepo",
+	"private": true,
+	"scripts": {
+		"dev:front": "pnpm --filter frontend dev",
+		"dev:back": "pnpm --filter backend dev",
+		"dev": "concurrently \"pnpm dev:front\" \"pnpm dev:back\"",
+		"build": "pnpm build:frontend && pnpm build:backend",
+		"build:frontend": "vite build",
+		"build:backend": "tsc",
+		"install:all": "pnpm install"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.6",
+		"concurrently": "^9.2.1"
+	}
+}

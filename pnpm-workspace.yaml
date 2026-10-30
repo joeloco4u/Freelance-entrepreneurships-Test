@@ -1,0 +1,7 @@
+# pnpm-workspace.yaml en la raíz
+packages:
+  - 'frontend'
+  - 'backend'
+allowBuilds:
+  '@swc/core': false
+  esbuild: false
