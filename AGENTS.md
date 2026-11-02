@@ -20,9 +20,10 @@ pnpm build        # tsc output to dist/
 
 ## Required Environment Setup
 
-Both `backend/.env` and `frontend/.env` must exist. Key vars:
+Both `backend/.env` and `frontend/.env` must exist for real (non-mock) mode. Key vars:
 - **Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT=3000`, `SLACK_TOKEN_SHEET_URL`
 - **Frontend**: `VITE_API_URL=http://localhost:3000`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- **Frontend (optional)**: `VITE_MOCK_MODE` — `true` | `false`. Mock mode is ON by default in `vite dev` (no `.env`, Supabase project, or backend needed); `false` disables it in development. `true` set at **BUILD time** now enables mock mode in a production build (backend-less demo deployment, e.g. the current Vercel demo); it must be unset or `false` for a real production deployment. The value is baked in at build time and requires a rebuild to change. See `frontend/README.md` ("Desarrollo local sin backend").
 
 ## Supabase Storage
 
