@@ -448,32 +448,8 @@ export const MOCK_AUTH_USER: User = {
   is_anonymous: false,
 };
 
-export const MOCK_SOFTWARE_UPDATES: SoftwareUpdate[] = [
-  {
-    id: "mock-update-1",
-    title: "Catálogo más rápido",
-    description: "Mejoramos la carga y el filtrado de productos del catálogo.",
-    category: "improvement",
-    created_at: "2026-10-20T10:00:00.000Z",
-    version: "1.4.0",
-  },
-  {
-    id: "mock-update-2",
-    title: "Nuevo panel de emprendedores",
-    description: "Los administradores ahora ven métricas resumidas por negocio.",
-    category: "new_feature",
-    created_at: "2026-10-12T10:00:00.000Z",
-    version: "1.3.0",
-  },
-  {
-    id: "mock-update-3",
-    title: "Corrección en el carrito",
-    description: "Se corrigió el cálculo de totales con productos sin stock.",
-    category: "bugfix",
-    created_at: "2026-10-05T10:00:00.000Z",
-    version: "1.2.1",
-  },
-];
+// Intencionalmente vacío: el demo no debe mostrar notificaciones falsas.
+export const MOCK_SOFTWARE_UPDATES: SoftwareUpdate[] = [];
 
 export const MOCK_SIDEBAR_USER: SidebarUser = {
   id: "00000000-0000-4000-8000-000000000001",

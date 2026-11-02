@@ -66,7 +66,7 @@ Con ese valor el frontend vuelve a usar `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON
 | `useProducts` | `frontend/src/hooks/useProducts.ts` | Productos de ejemplo y alta/edición/borrado en memoria, con los mismos toasts que el flujo real. |
 | `useAdminData` | `frontend/src/hooks/useAdminData.ts` | Lista de ventas vacía; `processPayroll` responde con «Nómina simulada (mock mode)». |
 | `useITData` | `frontend/src/hooks/useITData.ts` | Métricas en cero (`totalUsers`, `pendingRequests`, `activeSessions`). |
-| `useSoftwareUpdates` | `frontend/src/hooks/useSoftwareUpdates.ts` | Tres novedades de ejemplo. |
+| `useSoftwareUpdates` | `frontend/src/hooks/useSoftwareUpdates.ts` | Lista vacía: `MOCK_SOFTWARE_UPDATES` está intencionalmente sin elementos para la demo, así que la campana y el modal muestran «No hay notificaciones nuevas» y sin badge. |
 | `CatalogHeader` | `frontend/src/components/features/catalog/CatalogHeader.tsx` | El encabezado arranca en estado «sesión iniciada». |
 | `ProductFormModal` | `.../my-entrepreneurships/EntrepreneurShipsMenu/products/ProductFormModal.tsx` | Los desplegables de categorías y productos simples se llenan con los fixtures. |
 
@@ -76,7 +76,7 @@ Todos los fixtures viven en `frontend/src/config/mockData.ts`:
 
 - **6 productos** de catálogo y de emprendimiento, incluidos `"4 Torontos"` y `"Bolitas de coco"`.
 - **3 categorías**: Comida, Bebidas y Postres.
-- **3 novedades de software** (`MOCK_SOFTWARE_UPDATES`).
+- **Sin novedades de software de ejemplo**: `MOCK_SOFTWARE_UPDATES` está intencionalmente vacío (`[]`) para la demo, por lo que la campana y el modal de novedades muestran el estado vacío «No hay notificaciones nuevas».
 - **1 usuario mock** (`mock.admin@example.com`) con roles `["ADMIN", "IT"]`.
 
 ### Qué NO se simula

@@ -48,7 +48,7 @@ export default function SoftwareUpdatesWidget({
         </div>
       ) : updates.length === 0 ? (
         <div className="py-8 text-center text-sm text-gray-400">
-          Sin novedades este mes
+          No hay notificaciones nuevas
         </div>
       ) : (
         <div className="divide-y divide-gray-50">

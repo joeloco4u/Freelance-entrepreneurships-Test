@@ -13,6 +13,17 @@
 
 ## [Unreleased]
 
+### Mock software updates cleared for demo
+
+- **Date:** `2026-11-02`
+- **Type:** `chore`
+- **Files modified:**
+  - `frontend/src/config/mockData.ts`
+  - `frontend/src/components/layout/SoftwareUpdatesWidget.tsx`
+  - `frontend/README.md`
+- **Description:** the three fake software-update fixtures in `MOCK_SOFTWARE_UPDATES` were removed, so the exported array is now intentionally empty (`[]`) for the stakeholder demo; the `SoftwareUpdate` type import is retained because the exported annotation still uses it. The shared empty state in `SoftwareUpdatesWidget` now reads "No hay notificaciones nuevas" instead of "Sin novedades este mes". Because the same widget backs both the catalog header bell popover (`CatalogHeader.tsx`) and the sidebar "Ver novedades" modal (`Sidebar.tsx` via `UpdatesModal.tsx`), both surfaces now show the same clean empty state. With an empty array, `useSoftwareUpdates` yields `loading: false` in mock mode and `unreadCount: 0`, so the bell and sidebar badges hide automatically. The real (non-mock) notifications path is unchanged except for the shared empty-state copy; no behavior, endpoint, or data contract changed. `frontend/README.md` was updated to describe the intentionally empty fixture list instead of the former three samples.
+- **Verification:** targeted ESLint clean on both code files; `@code-reviewer` and `@security-auditor` found no regressions, no new type or lint errors, no XSS or data leak, and no security control removed; no build was run per project build policy; no backend, schema, SQL, or `.env` changes; no emojis.
+
 ### Public catalog sede switcher and production mock-mode fix
 
 - **Date:** `2026-11-02`
