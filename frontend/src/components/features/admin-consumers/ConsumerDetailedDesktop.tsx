@@ -1,5 +1,8 @@
 import { Dropdown, type MenuProps } from "antd";
 import { CheckCircle2, MoreVertical, RotateCcw } from "lucide-react";
+import type { AdminSedeFilter } from "../../../config/locations";
+import { SedeBadge } from "../../shared/SedeBadge";
+import { SedeColumnFilter } from "../../shared/SedeColumnFilter";
 import type { GlobalSale, SaleItemDetail } from "../../../types";
 import { formatCurrency } from "../../../utils/format";
 import StatusBadge, { PaymentTypeLabel } from "../my-purchases/shared/StatusBadge";
@@ -12,6 +15,9 @@ interface Props {
   onProcessSingle: (id: string) => void;
   onRefund: (sale: GlobalSale) => void;
   processingIds: string[];
+  sedeFilter: AdminSedeFilter;
+  onSedeFilterChange: (value: AdminSedeFilter) => void;
+  hasLocationData: boolean;
 }
 
 export const ConsumerDetailedDesktop = ({
@@ -22,6 +28,9 @@ export const ConsumerDetailedDesktop = ({
   onProcessSingle,
   onRefund,
   processingIds,
+  sedeFilter,
+  onSedeFilterChange,
+  hasLocationData,
 }: Props) => {
   const getActionMenu = (sale: GlobalSale): MenuProps => {
     const allRefunded = sale.sale_items.every((item) => item.refunded);
@@ -69,6 +78,14 @@ export const ConsumerDetailedDesktop = ({
             <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
               Productos
             </th>
+            {hasLocationData && (
+              <th scope="col" className="px-6 py-4">
+                <SedeColumnFilter
+                  value={sedeFilter}
+                  onChange={onSedeFilterChange}
+                />
+              </th>
+            )}
             <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
               Pago
             </th>
@@ -134,6 +151,13 @@ export const ConsumerDetailedDesktop = ({
                   ))}
                 </div>
               </td>
+              {hasLocationData && (
+                <td className="px-6 py-4">
+                  <SedeBadge
+                    codes={sale.location_id ? [sale.location_id] : []}
+                  />
+                </td>
+              )}
               <td className="px-6 py-4">
                 <PaymentTypeLabel paymentType={sale.payment_type} paymentMethod={sale.payment_method} />
               </td>

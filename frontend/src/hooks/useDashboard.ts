@@ -10,13 +10,19 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom"; // Añadimos useLocation
+import { MOCK_ROLES, MOCK_SIDEBAR_USER } from "../config/mockData";
+import { MOCK_MODE } from "../config/mockMode";
 import { supabase } from "../config/supabaseClient";
 import type { MenuItem, SidebarUser, UserRole } from "../types";
 
 export const useDashboard = () => {
-  const [user, setUser] = useState<SidebarUser | null>(null);
-  const [roles, setRoles] = useState<UserRole[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<SidebarUser | null>(() =>
+    MOCK_MODE ? MOCK_SIDEBAR_USER : null,
+  );
+  const [roles, setRoles] = useState<UserRole[]>(() =>
+    MOCK_MODE ? [...MOCK_ROLES] : [],
+  );
+  const [loading, setLoading] = useState(!MOCK_MODE);
 
   const navigate = useNavigate();
   const location = useLocation(); // Para saber dónde estamos parados
@@ -113,6 +119,8 @@ export const useDashboard = () => {
   };
 
   useEffect(() => {
+    if (MOCK_MODE) return;
+
     const fetchUserAndRoles = async () => {
       try {
         setLoading(true);

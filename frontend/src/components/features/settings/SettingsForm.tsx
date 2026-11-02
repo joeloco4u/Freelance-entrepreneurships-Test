@@ -19,6 +19,10 @@ interface SettingsFormProps {
   paymentsSheetOptions: SheetOption[];
   onSave: () => Promise<void>;
   onOpenSheetsLink: () => void;
+  disabled?: boolean;
+  title?: string;
+  description?: string;
+  note?: string;
 }
 
 export function SettingsForm({
@@ -30,6 +34,10 @@ export function SettingsForm({
   paymentsSheetOptions,
   onSave,
   onOpenSheetsLink,
+  disabled = false,
+  title = "Integración con Google Sheets",
+  description = "Configura la hoja de cálculo donde se transferirán las ventas",
+  note,
 }: SettingsFormProps) {
   return (
     <div className="bg-white rounded-b-2xl p-6 mb-6">
@@ -38,14 +46,12 @@ export function SettingsForm({
           <FileSpreadsheet className="w-6 h-6 text-primary" />
         </div>
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">
-            Integración con Google Sheets
-          </h2>
-          <p className="text-sm text-gray-500">
-            Configura la hoja de cálculo donde se transferirán las ventas
-          </p>
+          <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+          <p className="text-sm text-gray-500">{description}</p>
         </div>
       </div>
+
+      {note && <p className="text-xs text-gray-400 mb-4">{note}</p>}
 
       <div className="space-y-5">
         <div>
@@ -67,14 +73,16 @@ export function SettingsForm({
                   setConfig({ ...config, spreadsheet_id: e.target.value })
                 }
                 placeholder="Ej: 1abc123XYZ..."
-                className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={disabled}
+                className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
               />
             </div>
             {config.spreadsheet_id && (
               <button
                 type="button"
                 onClick={onOpenSheetsLink}
-                className="cursor-pointer px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors flex items-center gap-2"
+                disabled={disabled}
+                className="cursor-pointer px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <ExternalLink className="w-4 h-4" />
               </button>
@@ -101,7 +109,7 @@ export function SettingsForm({
             onChange={(value) => setConfig({ ...config, credits_sheet: value })}
             options={creditsSheetOptions}
             loading={loadingSheets}
-            disabled={loadingSheets || !config.spreadsheet_id}
+            disabled={disabled || loadingSheets || !config.spreadsheet_id}
             filterOption={(input, option) =>
               (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
             }
@@ -137,7 +145,7 @@ export function SettingsForm({
             }
             options={paymentsSheetOptions}
             loading={loadingSheets}
-            disabled={loadingSheets || !config.spreadsheet_id}
+            disabled={disabled || loadingSheets || !config.spreadsheet_id}
             filterOption={(input, option) =>
               (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
             }
@@ -156,7 +164,7 @@ export function SettingsForm({
         <button
           type="button"
           onClick={onSave}
-          disabled={saving || loadingSheets}
+          disabled={disabled || saving || loadingSheets}
           className="cursor-pointer px-6 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? (

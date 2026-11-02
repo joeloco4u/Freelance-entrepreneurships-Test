@@ -1,13 +1,25 @@
 import { Store } from "lucide-react";
+import type { AdminSedeFilter } from "../../../config/locations";
+import { SedeBadge } from "../../shared/SedeBadge";
+import { SedeColumnFilter } from "../../shared/SedeColumnFilter";
 import type { EntrepreneurSummary } from "../../../types";
 import { formatCurrency } from "../../../utils/format";
 
 interface Props {
   data: EntrepreneurSummary[];
   onSelect: (id: string) => void;
+  sedeFilter: AdminSedeFilter;
+  onSedeFilterChange: (value: AdminSedeFilter) => void;
+  hasLocationData: boolean;
 }
 
-export const SummaryDesktop = ({ data, onSelect }: Props) => (
+export const SummaryDesktop = ({
+  data,
+  onSelect,
+  sedeFilter,
+  onSedeFilterChange,
+  hasLocationData,
+}: Props) => (
   <div className="hidden md:block overflow-x-auto">
     <table className="w-full text-left border-collapse">
       <thead>
@@ -15,6 +27,14 @@ export const SummaryDesktop = ({ data, onSelect }: Props) => (
           <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase">
             Negocio
           </th>
+          {hasLocationData && (
+            <th scope="col" className="px-6 py-4">
+              <SedeColumnFilter
+                value={sedeFilter}
+                onChange={onSedeFilterChange}
+              />
+            </th>
+          )}
           <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase text-right">
             Pedidos
           </th>
@@ -43,6 +63,11 @@ export const SummaryDesktop = ({ data, onSelect }: Props) => (
                 </span>
               </div>
             </td>
+            {hasLocationData && (
+              <td className="px-6 py-4">
+                <SedeBadge codes={ent.sedes} />
+              </td>
+            )}
             <td className="px-6 py-4 text-right text-sm text-gray-500">
               {ent.salesCount}
             </td>

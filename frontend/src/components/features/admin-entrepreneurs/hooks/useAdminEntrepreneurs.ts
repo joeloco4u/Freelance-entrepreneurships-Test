@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
+import type { AdminSedeFilter } from "../../../../config/locations";
 import { useAdminData } from "../../../../hooks/useAdminData";
 import type { SaleItemDetail } from "../../../../types";
 
-export const useAdminEntrepreneurs = () => {
-  const adminData = useAdminData();
+export const useAdminEntrepreneurs = (sedeFilter: AdminSedeFilter = "ALL") => {
+  const adminData = useAdminData(true, sedeFilter);
   const [view, setView] = useState<"summary" | "detailed">("summary");
   const [selectedEntId, setSelectedEntId] = useState<string | null>(null);
 
@@ -42,14 +43,22 @@ export const useAdminEntrepreneurs = () => {
 
   const handleBackToSummary = () => {
     adminData.setSearchQuery("");
+    adminData.clearSelection();
     setView("summary");
     setSelectedEntId(null);
   };
 
   const handleSelectEntrepreneur = (id: string) => {
     adminData.setSearchQuery("");
+    adminData.clearSelection();
     setSelectedEntId(id);
     setView("detailed");
+  };
+
+  const resetScopeState = () => {
+    setView("summary");
+    setSelectedEntId(null);
+    adminData.clearSelection();
   };
 
   return {
@@ -61,5 +70,6 @@ export const useAdminEntrepreneurs = () => {
     toggleAllVisible,
     handleBackToSummary,
     handleSelectEntrepreneur,
+    resetScopeState,
   };
 };

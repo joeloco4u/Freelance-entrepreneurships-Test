@@ -16,12 +16,22 @@ import type { GlobalSale } from "../../../types";
 import { exportSalesToExcel } from "../../../utils/exportToExcel";
 import { getErrorMessage } from "../../../utils/errorMessage";
 import { ERROR_MESSAGES } from "../../../constants/errorMessages";
+import type { AdminSedeFilter } from "../../../config/locations";
+import { MOCK_MODE } from "../../../config/mockMode";
 
 export default function AdminEntrepreneurs() {
-  const logic = useAdminEntrepreneurs();
+  const [sedeFilter, setSedeFilter] = useState<AdminSedeFilter>("ALL");
+  const logic = useAdminEntrepreneurs(sedeFilter);
 
   const [refundingSale, setRefundingSale] = useState<GlobalSale | null>(null);
   const [isRefunding, setIsRefunding] = useState(false);
+
+  const handleSedeFilterChange = (next: AdminSedeFilter) => {
+    logic.resetScopeState();
+    setRefundingSale(null);
+    setIsRefunding(false);
+    setSedeFilter(next);
+  };
 
   const handleRefund = useCallback((sale: GlobalSale) => {
     setRefundingSale(sale);
@@ -35,6 +45,22 @@ export default function AdminEntrepreneurs() {
   const handleConfirmRefund = useCallback(
     async (itemIds: number[]) => {
       if (!refundingSale) return;
+
+      if (MOCK_MODE) {
+        const allRefunded = refundingSale.sale_items.every(
+          (item) => item.refunded || itemIds.includes(item.id),
+        );
+        logic.markItemsRefunded(refundingSale.id, itemIds);
+        if (allRefunded) {
+          toast.success("Venta reembolsada correctamente");
+        } else {
+          toast.success("Items reembolsados correctamente");
+        }
+        setRefundingSale(null);
+        logic.setSelectedSales((prev: string[]) => prev.filter((id) => id !== refundingSale.id));
+        return;
+      }
+
       try {
         setIsRefunding(true);
         logic.setProcessingIds((prev: string[]) => [...prev, refundingSale.id]);
@@ -124,6 +150,9 @@ export default function AdminEntrepreneurs() {
             data={logic.entrepreneursSummary}
             onSelect={logic.handleSelectEntrepreneur}
             searchQuery={logic.searchQuery}
+            sedeFilter={sedeFilter}
+            onSedeFilterChange={handleSedeFilterChange}
+            hasLocationData={logic.hasLocationData}
           />
         ) : (
           <DetailedView
@@ -138,6 +167,9 @@ export default function AdminEntrepreneurs() {
             processingIds={logic.processingIds}
             searchQuery={logic.searchQuery}
             selectedEntId={logic.selectedEntId}
+            sedeFilter={sedeFilter}
+            onSedeFilterChange={handleSedeFilterChange}
+            hasLocationData={logic.hasLocationData}
           />
         )}
       </div>

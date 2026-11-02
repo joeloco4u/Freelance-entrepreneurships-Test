@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 import { toast } from "react-toastify";
 import { SummaryEmptyState } from "../admin-entrepreneurs/SummaryEmptyState";
 import DetailedSalesStats from "../../shared/DetailedSalesStats";
+import { SedeColumnFilter } from "../../shared/SedeColumnFilter";
 import { AdminConsumersSkeleton } from "./AdminConsumersSkeleton";
 import { BulkActionBanner } from "./BulkActionBanner";
 import { ConsumerDetailedDesktop } from "./ConsumerDetailedDesktop";
@@ -18,8 +19,12 @@ import type { GlobalSale } from "../../../types";
 import { exportSalesToExcel } from "../../../utils/exportToExcel";
 import { getErrorMessage } from "../../../utils/errorMessage";
 import { ERROR_MESSAGES } from "../../../constants/errorMessages";
+import type { AdminSedeFilter } from "../../../config/locations";
+import { MOCK_MODE } from "../../../config/mockMode";
 
 export default function AdminConsumers() {
+  const [sedeFilter, setSedeFilter] = useState<AdminSedeFilter>("ALL");
+
   const {
     consumersSummary,
     detailedSales,
@@ -48,10 +53,19 @@ export default function AdminConsumers() {
     toggleSaleSelection,
     toggleAllVisible,
     handleBackToSummary,
-  } = useAdminConsumers();
+    resetScopeState,
+    hasLocationData,
+  } = useAdminConsumers(sedeFilter);
 
   const [refundingSale, setRefundingSale] = useState<GlobalSale | null>(null);
   const [isRefunding, setIsRefunding] = useState(false);
+
+  const handleSedeFilterChange = (next: AdminSedeFilter) => {
+    setRefundingSale(null);
+    setIsRefunding(false);
+    resetScopeState();
+    setSedeFilter(next);
+  };
 
   const handleRefund = useCallback((sale: GlobalSale) => {
     setRefundingSale(sale);
@@ -65,6 +79,22 @@ export default function AdminConsumers() {
   const handleConfirmRefund = useCallback(
     async (itemIds: number[]) => {
       if (!refundingSale) return;
+
+      if (MOCK_MODE) {
+        const allRefunded = refundingSale.sale_items.every(
+          (item) => item.refunded || itemIds.includes(item.id),
+        );
+        markItemsRefunded(refundingSale.id, itemIds);
+        if (allRefunded) {
+          toast.success("Venta reembolsada correctamente");
+        } else {
+          toast.success("Items reembolsados correctamente");
+        }
+        setRefundingSale(null);
+        setSelectedSales((prev: string[]) => prev.filter((id) => id !== refundingSale.id));
+        return;
+      }
+
       try {
         setIsRefunding(true);
         setProcessingIds((prev: string[]) => [...prev, refundingSale.id]);
@@ -149,7 +179,20 @@ export default function AdminConsumers() {
         {view === "summary" ? (
           <div className="grid grid-cols-1 gap-4 md:bg-white md:rounded-3xl md:border md:border-gray-100 md:shadow-sm overflow-hidden">
             {consumersSummary.length === 0 ? (
-              <SummaryEmptyState query={searchQuery} />
+              <div>
+                {hasLocationData && (
+                  <div className="px-6 pt-4">
+                    <SedeColumnFilter
+                      value={sedeFilter}
+                      onChange={handleSedeFilterChange}
+                    />
+                  </div>
+                )}
+                <SummaryEmptyState
+                  query={searchQuery}
+                  sedeFilter={sedeFilter}
+                />
+              </div>
             ) : (
               <>
                 <ConsumersDesktop
@@ -159,6 +202,9 @@ export default function AdminConsumers() {
                     setSelectedUserEmail(email);
                     setView("detailed");
                   }}
+                  sedeFilter={sedeFilter}
+                  onSedeFilterChange={handleSedeFilterChange}
+                  hasLocationData={hasLocationData}
                 />
                 <ConsumersMobile
                   data={consumersSummary}
@@ -174,7 +220,20 @@ export default function AdminConsumers() {
         ) : (
           <div className="space-y-4 md:bg-white md:rounded-3xl md:border md:border-gray-100 md:shadow-sm overflow-hidden animate-in slide-in-from-right duration-300">
             {detailedSales.length === 0 ? (
-              <SummaryEmptyState query={searchQuery} />
+              <div>
+                {hasLocationData && (
+                  <div className="px-6 pt-4">
+                    <SedeColumnFilter
+                      value={sedeFilter}
+                      onChange={handleSedeFilterChange}
+                    />
+                  </div>
+                )}
+                <SummaryEmptyState
+                  query={searchQuery}
+                  sedeFilter={sedeFilter}
+                />
+              </div>
             ) : (
               <>
                 <ConsumerDetailedDesktop
@@ -185,6 +244,9 @@ export default function AdminConsumers() {
                   onProcessSingle={(id) => processPayroll([id])}
                   onRefund={handleRefund}
                   processingIds={processingIds}
+                  sedeFilter={sedeFilter}
+                  onSedeFilterChange={handleSedeFilterChange}
+                  hasLocationData={hasLocationData}
                 />
                 <ConsumerDetailedMobile
                   sales={detailedSales}

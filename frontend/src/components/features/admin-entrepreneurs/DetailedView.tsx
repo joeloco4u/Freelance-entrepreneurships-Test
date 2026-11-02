@@ -1,4 +1,6 @@
+import type { AdminSedeFilter } from "../../../config/locations";
 import type { GlobalSale } from "../../../types";
+import { SedeColumnFilter } from "../../shared/SedeColumnFilter";
 import { DetailedDesktop } from "./DetailedDesktop";
 import { DetailedMobile } from "./DetailedMobile";
 import { SummaryEmptyState } from "./SummaryEmptyState";
@@ -15,13 +17,34 @@ interface Props {
   processingIds: string[];
   searchQuery: string;
   selectedEntId?: string | null;
+  sedeFilter: AdminSedeFilter;
+  onSedeFilterChange: (value: AdminSedeFilter) => void;
+  hasLocationData: boolean;
 }
 
 export const DetailedView = (props: Props) => {
-  const { sales, searchQuery } = props;
+  const {
+    sales,
+    searchQuery,
+    sedeFilter,
+    onSedeFilterChange,
+    hasLocationData,
+  } = props;
 
   if (sales.length === 0) {
-    return <SummaryEmptyState query={searchQuery} />;
+    return (
+      <div className="space-y-4">
+        {hasLocationData && (
+          <div className="px-6 pt-4">
+            <SedeColumnFilter
+              value={sedeFilter}
+              onChange={onSedeFilterChange}
+            />
+          </div>
+        )}
+        <SummaryEmptyState query={searchQuery} sedeFilter={sedeFilter} />
+      </div>
+    );
   }
 
   return (

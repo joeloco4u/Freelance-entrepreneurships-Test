@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  getMockCatalogForLocation,
+  MOCK_CATEGORIES,
+} from "../config/mockData";
+import type { LocationCode } from "../config/locations";
+import { MOCK_MODE } from "../config/mockMode";
 import { getCategories } from "../services/categoryService";
 import { getActiveProducts } from "../services/productService";
 import type { CatalogProduct, Category } from "../types";
@@ -8,10 +14,12 @@ import { ERROR_MESSAGES } from "../constants/errorMessages";
 export type SortOption = "name-asc" | "name-desc" | "price-asc" | "price-desc";
 const PAGE_SIZE = 12;
 
-export function useCatalog() {
-  const [products, setProducts] = useState<CatalogProduct[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+export function useCatalog(location: LocationCode) {
+  const [remoteProducts, setRemoteProducts] = useState<CatalogProduct[]>([]);
+  const [categories, setCategories] = useState<Category[]>(() =>
+    MOCK_MODE ? MOCK_CATEGORIES : [],
+  );
+  const [loading, setLoading] = useState(!MOCK_MODE);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
@@ -20,16 +28,25 @@ export function useCatalog() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
+  // Business rule: in mock mode the fixture array is the single source of truth.
+  // It must be returned directly, not merged with or replaced by the remote list.
+  const products: CatalogProduct[] = MOCK_MODE
+    ? getMockCatalogForLocation(location)
+    : remoteProducts;
+
   useEffect(() => {
+    if (MOCK_MODE) return;
+
     let cancelled = false;
 
     Promise.all([getActiveProducts(), getCategories()])
       .then(([productsData, categoriesData]) => {
         if (cancelled) return;
-        setProducts(
+        setRemoteProducts(
           productsData.toSorted((a, b) => a.name.localeCompare(b.name)),
         );
         setCategories(categoriesData);
+        setError(null);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -47,16 +64,19 @@ export function useCatalog() {
   }, []);
 
   const refreshProducts = async () => {
+    if (MOCK_MODE) return;
+
     setLoading(true);
     try {
       const [productsData, categoriesData] = await Promise.all([
         getActiveProducts(),
         getCategories(),
       ]);
-      setProducts(
+      setRemoteProducts(
         productsData.toSorted((a, b) => a.name.localeCompare(b.name)),
       );
       setCategories(categoriesData);
+      setError(null);
     } catch (err: unknown) {
       setError(
         getErrorMessage(err, ERROR_MESSAGES.products.load),
@@ -94,9 +114,10 @@ export function useCatalog() {
   }, [products, search, sortBy, hideOutOfStock, selectedCategory]);
 
   const totalPages = Math.ceil(filteredAndSorted.length / PAGE_SIZE);
+  const safePage = Math.min(page, Math.max(totalPages, 1));
   const paginatedProducts = filteredAndSorted.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE,
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
   );
 
   const handleSearch = (value: string) => {
@@ -120,7 +141,7 @@ export function useCatalog() {
     refreshProducts,
     loading,
     error,
-    page,
+    page: safePage,
     totalPages,
     setPage,
     search,
