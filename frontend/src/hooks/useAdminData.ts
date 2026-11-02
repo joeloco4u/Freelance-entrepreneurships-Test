@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import {
+  LOCATION_CODES,
+  type AdminSedeFilter,
+  type LocationCode,
+} from "../config/locations";
+import { MOCK_SALES } from "../config/mockData";
+import { MOCK_MODE } from "../config/mockMode";
 import { updatePayrollStatusBatch } from "../services/adminService";
 import { getAllSales } from "../services/saleService";
 import {
@@ -15,10 +22,27 @@ import { ERROR_MESSAGES } from "../constants/errorMessages";
 /**
  * @param enabled - Controla si el hook debe realizar la petición a la API.
  * Útil para evitar errores 403 en usuarios sin rol ADMIN/IT.
+ * @param sedeFilter - Filtra las agregaciones por sede sin alterar los mapas de sedes.
  */
-export function useAdminData(enabled: boolean = true) {
-  const [sales, setSales] = useState<GlobalSale[]>([]);
-  const [loading, setLoading] = useState<boolean>(enabled);
+export function useAdminData(
+  enabled: boolean = true,
+  sedeFilter: AdminSedeFilter = "ALL",
+) {
+  const [sales, setSales] = useState<GlobalSale[]>(() =>
+    MOCK_MODE
+      ? MOCK_SALES.map((sale) => ({
+          ...sale,
+          sale_items: sale.sale_items.map((item) => ({
+            ...item,
+            products: {
+              ...item.products,
+              entrepreneurships: { ...item.products.entrepreneurships },
+            },
+          })),
+        }))
+      : [],
+  );
+  const [loading, setLoading] = useState<boolean>(!MOCK_MODE && enabled);
   const [processingIds, setProcessingIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -31,8 +55,71 @@ export function useAdminData(enabled: boolean = true) {
   const [modalConfig, setModalConfig] = useState({ title: "", message: "" });
   const [selectedSales, setSelectedSales] = useState<string[]>([]);
 
+  const scopedSales = useMemo(
+    () =>
+      sedeFilter === "ALL"
+        ? sales
+        : sales.filter((sale) => sale.location_id === sedeFilter),
+    [sales, sedeFilter],
+  );
+
+  const hasLocationData = useMemo(
+    () => sales.some((sale) => !!sale.location_id),
+    [sales],
+  );
+
+  const sedesByEntrepreneur = useMemo(() => {
+    const map: Record<string, Set<LocationCode>> = {};
+
+    sales.forEach((sale) => {
+      const locationId = sale.location_id;
+      if (!locationId) return;
+
+      sale.sale_items.forEach((item) => {
+        const entId = item.products?.entrepreneurships?.id;
+        if (!entId) return;
+        if (!map[entId]) map[entId] = new Set();
+        map[entId].add(locationId);
+      });
+    });
+
+    const result: Record<string, LocationCode[]> = {};
+    Object.entries(map).forEach(([entId, sedes]) => {
+      result[entId] = LOCATION_CODES.filter((code) => sedes.has(code));
+    });
+    return result;
+  }, [sales]);
+
+  const sedesByConsumer = useMemo(() => {
+    const map: Record<string, Set<LocationCode>> = {};
+
+    sales.forEach((sale) => {
+      const locationId = sale.location_id;
+      if (!locationId) return;
+
+      const email = sale.users?.email;
+      if (!email) return;
+      if (!map[email]) map[email] = new Set();
+      map[email].add(locationId);
+    });
+
+    const result: Record<string, LocationCode[]> = {};
+    Object.entries(map).forEach(([email, sedes]) => {
+      result[email] = LOCATION_CODES.filter((code) => sedes.has(code));
+    });
+    return result;
+  }, [sales]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedSales([]);
+    setIdsToProcess([]);
+    setIsModalOpen(false);
+  }, []);
+
   const fetchData = useCallback(
     async (isSilent = false) => {
+      if (MOCK_MODE) return;
+
       if (!enabled) {
         setLoading(false);
         return;
@@ -57,6 +144,8 @@ export function useAdminData(enabled: boolean = true) {
   );
 
   useEffect(() => {
+    if (MOCK_MODE) return;
+
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchData();
   }, [enabled, fetchData]);
@@ -81,6 +170,21 @@ export function useAdminData(enabled: boolean = true) {
 
   const processPayroll = async (saleIds: string[]) => {
     if (saleIds.length === 0) return;
+
+    if (MOCK_MODE) {
+      setSales((prev) =>
+        prev.map((sale) =>
+          saleIds.includes(sale.id)
+            ? { ...sale, payroll_processed: true }
+            : sale,
+        ),
+      );
+      setSelectedSales((prev) => prev.filter((id) => !saleIds.includes(id)));
+      setIdsToProcess([]);
+      setIsModalOpen(false);
+      toast.success("Nómina simulada (mock mode)");
+      return;
+    }
 
     try {
       setProcessingIds((prev) => [...prev, ...saleIds]);
@@ -137,7 +241,7 @@ export function useAdminData(enabled: boolean = true) {
 
       // 1. Agrupación estática (Para que el nombre no desaparezca nunca)
       // Itera sobre ALL sale_items para capturar TODOS los emprendimientos involucrados
-      sales.forEach((s) => {
+      scopedSales.forEach((s) => {
         s.sale_items.forEach((item) => {
           const entrepreneurship = item.products?.entrepreneurships;
           if (!entrepreneurship) return;
@@ -151,6 +255,7 @@ export function useAdminData(enabled: boolean = true) {
               pendingPayroll: 0,
               salesCount: 0,
               pendingIds: [],
+              sedes: [...(sedesByEntrepreneur[entrepreneurship.id] ?? [])],
             };
           }
         });
@@ -158,7 +263,7 @@ export function useAdminData(enabled: boolean = true) {
 
       // 2. Filtrado base por FECHA, CICLO, ESTADO y TIPO DE PAGO
       const currentYear = new Date().getFullYear();
-      const baseSales = sales.filter((sale) => {
+      const baseSales = scopedSales.filter((sale) => {
         const saleDate = new Date(sale.created_at);
         const matchesStatus =
           statusFilter === "all"
@@ -200,7 +305,11 @@ export function useAdminData(enabled: boolean = true) {
           venturesInSale.add(entId);
 
           if (!map[entId]) {
-            map[entId] = { ...staticMap[entId] };
+            map[entId] = {
+              ...staticMap[entId],
+              pendingIds: [],
+              sedes: [...staticMap[entId].sedes],
+            };
           }
 
           const subtotal = Number(item.subtotal) || 0;
@@ -236,7 +345,8 @@ export function useAdminData(enabled: boolean = true) {
         filteredEntrepreneursSummary: filteredList,
       };
     }, [
-      sales,
+      scopedSales,
+      sedesByEntrepreneur,
       searchQuery,
       statusFilter,
       paymentMethodFilter,
@@ -251,8 +361,8 @@ export function useAdminData(enabled: boolean = true) {
     const staticMap: Record<string, ConsumerSummary> = {}; // <--- Mapa de referencia persistente
 
     // 1. Agrupación estática (Para que el nombre del consumidor nunca sea undefined)
-    // Usamos 'sales' sin filtrar para asegurar que todos los usuarios existan en la referencia
-    sales.forEach((s) => {
+    // Usamos el alcance de la sede activa y las sedes se calculan desde el conjunto completo
+    scopedSales.forEach((s) => {
       const user = s.users;
       if (!user) return;
 
@@ -265,13 +375,14 @@ export function useAdminData(enabled: boolean = true) {
           pendingDeduction: 0,
           ordersCount: 0,
           pendingIds: [],
+          sedes: [...(sedesByConsumer[user.email] ?? [])],
         };
       }
     });
 
     // 2. Filtramos ventas por rango de fechas y mes
     const currentYear = new Date().getFullYear();
-    const cycleSales = sales.filter((s) => {
+    const cycleSales = scopedSales.filter((s) => {
       const saleDate = new Date(s.created_at);
       const matchesMonth =
         selectedMonth === null
@@ -289,7 +400,11 @@ export function useAdminData(enabled: boolean = true) {
 
       if (!map[user.email]) {
         // Inicializamos con los datos base del staticMap para asegurar consistencia
-        map[user.email] = { ...staticMap[user.email] };
+        map[user.email] = {
+          ...staticMap[user.email],
+          pendingIds: [],
+          sedes: [...staticMap[user.email].sedes],
+        };
       }
 
       map[user.email].totalSpent += s.total;
@@ -321,10 +436,17 @@ export function useAdminData(enabled: boolean = true) {
       fullConsumersSummary: Object.values(staticMap),
       consumersSummary: filteredList,
     };
-  }, [sales, searchQuery, dateRange, isDateInRange, selectedMonth]);
+  }, [
+    scopedSales,
+    sedesByConsumer,
+    searchQuery,
+    dateRange,
+    isDateInRange,
+    selectedMonth,
+  ]);
 
   const filteredSales = useMemo(() => {
-    return sales.filter((sale) => {
+    return scopedSales.filter((sale) => {
       const searchLower = searchQuery.toLowerCase();
       const saleDate = new Date(sale.created_at);
 
@@ -374,7 +496,7 @@ export function useAdminData(enabled: boolean = true) {
       return matchesSearch && matchesStatus && matchesPaymentType && matchesMonth && matchesDateRange;
     });
   }, [
-    sales,
+    scopedSales,
     searchQuery,
     statusFilter,
     paymentMethodFilter,
@@ -385,6 +507,8 @@ export function useAdminData(enabled: boolean = true) {
 
   return {
     sales: filteredSales,
+    hasLocationData,
+    clearSelection,
     selectedSales,
     setSelectedSales,
     toggleSaleSelection,

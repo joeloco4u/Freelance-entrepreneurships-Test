@@ -1,5 +1,6 @@
 import type { Session, User } from "@supabase/supabase-js";
 import type { LucideIcon } from "lucide-react";
+import type { LocationCode, ProductStocks } from "../config/locations";
 
 // ── Auth ────────────────────────────────────────────────────────────
 export type UserRole = "IT" | "ADMIN" | "PROVEEDOR" | "CONSUMIDOR";
@@ -199,6 +200,7 @@ export interface EntrepreneurshipProduct {
   category_id?: number;
   created_at: string;
   is_composed?: boolean;
+  stocks?: ProductStocks;
 }
 
 export interface ProductInput {
@@ -210,6 +212,7 @@ export interface ProductInput {
   image: string;
   imageFile?: File | null;
   category_id?: number;
+  stocks?: ProductStocks;
 }
 
 export interface ComposedProductComponent {
@@ -230,6 +233,7 @@ export interface ComposedProductInput {
   imageFile?: File | null;
   category_id?: number;
   components: ComposedProductComponent[];
+  stocks?: ProductStocks;
 }
 
 export type PaymentType = "credit" | "immediate";
@@ -309,6 +313,7 @@ export interface EntrepreneurSummary {
   pendingPayroll: number;
   salesCount: number;
   pendingIds: string[];
+  sedes: LocationCode[];
 }
 
 export interface ConsumerSummary {
@@ -319,6 +324,7 @@ export interface ConsumerSummary {
   pendingDeduction: number;
   ordersCount: number;
   pendingIds: string[];
+  sedes: LocationCode[];
 }
 
 export interface PayrollCycle {
@@ -341,6 +347,7 @@ export interface GlobalSale {
   payment_type: PaymentType;
   payment_method?: PaymentMethod | null;
   note?: string | null;
+  location_id?: LocationCode;
   users: {
     id: string;
     name: string;

@@ -3,15 +3,62 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import FreelanceLogo from "../../../assets/Isologo Freelance Latin America.png";
 import FreelanceIsotipo from "../../../assets/Isotipo FLA-Blanco.png";
+import {
+  LOCATION_CODES,
+  LOCATIONS,
+  type LocationCode,
+} from "../../../config/locations";
+import { MOCK_MODE } from "../../../config/mockMode";
 import { supabase } from "../../../config/supabaseClient";
 import { useSoftwareUpdates } from "../../../hooks/useSoftwareUpdates";
 import SoftwareUpdatesWidget from "../../layout/SoftwareUpdatesWidget";
+import { useAuth } from "../login/hooks/useAuth";
 
 interface Props {
   cartCount: number;
   onCartClick: () => void;
   isCartOpen: boolean;
   closeCart: () => void;
+  sede: LocationCode | null;
+  onSedeChange: (code: LocationCode) => void;
+}
+
+interface SedeSwitcherProps {
+  sede: LocationCode;
+  onSedeChange: (code: LocationCode) => void;
+}
+
+function SedeSwitcher({ sede, onSedeChange }: SedeSwitcherProps) {
+  return (
+    <div
+      role="group"
+      aria-label="Seleccionar sede"
+      className="flex items-center gap-1"
+    >
+      {LOCATION_CODES.map((code) => {
+        const isActive = code === sede;
+        const label = `Cambiar a sede ${LOCATIONS[code].name}`;
+        return (
+          <button
+            key={code}
+            type="button"
+            onClick={() => onSedeChange(code)}
+            disabled={isActive}
+            aria-pressed={isActive}
+            aria-label={label}
+            title={label}
+            className={`px-3 py-1 rounded-full text-xs font-semibold cursor-pointer disabled:cursor-default transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+              isActive
+                ? "bg-primary text-white"
+                : "bg-white text-gray-600 border border-gray-200 hover:border-primary hover:text-primary"
+            }`}
+          >
+            {code}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function CatalogHeader({
@@ -19,14 +66,21 @@ export default function CatalogHeader({
   onCartClick,
   isCartOpen,
   closeCart,
+  sede,
+  onSedeChange,
 }: Props) {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { roles, loading: authLoading } = useAuth();
+  const canSwitch =
+    !authLoading && (roles.includes("ADMIN") || roles.includes("IT"));
+  const [isLoggedIn, setIsLoggedIn] = useState(MOCK_MODE);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const { updates, loading, unreadCount, markAsRead } = useSoftwareUpdates();
 
   useEffect(() => {
+    if (MOCK_MODE) return;
+
     const checkUser = async () => {
       const { data } = await supabase.auth.getSession();
       setIsLoggedIn(!!data.session);
@@ -73,7 +127,7 @@ export default function CatalogHeader({
   return (
     <>
       <header className="bg-white border-b border-gray-100 px-8 h-20  items-center justify-between sticky top-0 z-10 hidden md:flex">
-        <div className="flex items-center">
+        <div className="flex items-center gap-3">
           <img
             src={FreelanceLogo}
             alt="Logo de Freelance Latin America"
@@ -82,6 +136,9 @@ export default function CatalogHeader({
         </div>
 
         <div className="flex items-center gap-4">
+          {canSwitch && sede !== null && (
+            <SedeSwitcher sede={sede} onSedeChange={onSedeChange} />
+          )}
           {/* Botón de Autenticación Dinámico */}
           <button
             type="button"
@@ -140,6 +197,13 @@ export default function CatalogHeader({
           </button>
         </div>
       </header>
+
+      {/* --- SELECTOR DE SEDE MÓVIL --- */}
+      {canSwitch && sede !== null && (
+        <div className="md:hidden flex items-center justify-center gap-3 bg-white border-b border-gray-100 px-4 py-2">
+          <SedeSwitcher sede={sede} onSedeChange={onSedeChange} />
+        </div>
+      )}
 
       {/* --- NAVEGACIÓN MÓVIL --- */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-gray-100 px-4 py-3 z-50 shadow-[0_-4px_15px_rgba(0,0,0,0.05)]">

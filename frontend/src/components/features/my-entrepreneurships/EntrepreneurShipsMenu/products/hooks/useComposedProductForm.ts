@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { getDefaultProductStocks } from "../../../../../../config/locations";
 import type {
   ComposedProductComponent,
   ComposedProductInput,
@@ -15,6 +16,7 @@ function buildFormData(
     image: product?.image || "",
     category_id: product?.category_id,
     components: product?.components || [],
+    stocks: product?.stocks ?? getDefaultProductStocks(0),
   };
 }
 

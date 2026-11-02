@@ -14,6 +14,17 @@ import type {
   EntrepreneurshipProduct,
   ProductInput,
 } from "../../../../../types";
+import {
+  LOCATION_CODES,
+  LOCATIONS,
+  getDefaultProductStocks,
+  type LocationCode,
+} from "../../../../../config/locations";
+import {
+  MOCK_CATEGORIES,
+  MOCK_ENTREPRENEURSHIP_PRODUCTS,
+} from "../../../../../config/mockData";
+import { MOCK_MODE } from "../../../../../config/mockMode";
 import { getCategories } from "../../../../../services/categoryService";
 import { getEntrepreneurshipProducts } from "../../../../../services/productService";
 import BaseFormModal from "../../../../shared/BaseFormModal";
@@ -59,22 +70,56 @@ export default function ProductFormModal({
     isComposed ? (composedData ?? null) : null,
   );
 
+  const simpleStocks =
+    simpleForm.formData.stocks ??
+    getDefaultProductStocks(simpleForm.formData.current_stock);
+  const composedStocks =
+    composedForm.formData.stocks ?? getDefaultProductStocks(0);
+
+  const updateComposedStock = (
+    location: LocationCode,
+    offered: boolean,
+  ) => {
+    composedForm.updateField("stocks", {
+      ...composedStocks,
+      [location]: { ...composedStocks[location], offered },
+    });
+  };
+
   useEffect(() => {
-    if (isOpen) {
-      Promise.all([
-        getCategories(),
-        getEntrepreneurshipProducts(entrepreneurshipId),
-      ])
-        .then(([cats, prods]) => {
-          setCategories(cats);
-          setSimpleProducts(
-            prods
-              .filter((p) => !p.is_composed)
-              .map((p) => ({ id: p.id, name: p.name })),
-          );
-        })
-        .finally(() => setLoadingCategories(false));
+    if (!isOpen) return;
+
+    if (MOCK_MODE) {
+      Promise.resolve().then(() => {
+        setCategories(MOCK_CATEGORIES);
+        setSimpleProducts(
+          MOCK_ENTREPRENEURSHIP_PRODUCTS.filter((p) => !p.is_composed).map(
+            (p) => ({ id: p.id, name: p.name }),
+          ),
+        );
+        setLoadingCategories(false);
+      });
+      return;
     }
+
+    Promise.all([
+      getCategories(),
+      getEntrepreneurshipProducts(entrepreneurshipId),
+    ])
+      .then(([cats, prods]) => {
+        setCategories(cats);
+        setSimpleProducts(
+          prods
+            .filter((p) => !p.is_composed)
+            .map((p) => ({ id: p.id, name: p.name })),
+        );
+      })
+      .catch((error: unknown) => {
+        console.error("[ProductFormModal] Error al cargar opciones:", error);
+        setCategories([]);
+        setSimpleProducts([]);
+      })
+      .finally(() => setLoadingCategories(false));
   }, [isOpen, entrepreneurshipId]);
 
   const handleSubmit = async (e: React.SubmitEvent) => {
@@ -91,6 +136,10 @@ export default function ProductFormModal({
     } else {
       const dataToSend: ProductInput = {
         ...simpleForm.formData,
+        current_stock: MOCK_MODE
+          ? (simpleForm.formData.stocks?.VF.stock ??
+            simpleForm.formData.current_stock)
+          : simpleForm.formData.current_stock,
         entrepreneurship_id: entrepreneurshipId,
         imageFile: simpleForm.selectedFile,
       };
@@ -99,7 +148,8 @@ export default function ProductFormModal({
     }
   };
 
-  const loadingComposedData = isComposed && isEditing && !composedData;
+  // Mock combos carry no components, so the loading state is disabled in mock mode.
+  const loadingComposedData = !MOCK_MODE && isComposed && isEditing && !composedData;
 
   return (
     <BaseFormModal
@@ -209,7 +259,7 @@ export default function ProductFormModal({
           </div>
 
           {/* Stock (solo para productos simples) */}
-          {!isComposed && (
+          {!MOCK_MODE && !isComposed && (
             <div>
               <label
                 htmlFor="stock"
@@ -242,7 +292,7 @@ export default function ProductFormModal({
           )}
 
           {/* Stock informativo para combos */}
-          {isComposed && (
+          {!MOCK_MODE && isComposed && (
             <div>
               <label htmlFor="stock" className="block text-sm font-medium text-gray-700 mb-1">
                 Stock (calculado)
@@ -259,6 +309,94 @@ export default function ProductFormModal({
             </div>
           )}
         </div>
+
+        {/* Disponibilidad por sede (mock) */}
+        {MOCK_MODE && !isComposed && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Disponibilidad por sede
+            </label>
+            <div className="space-y-2">
+              {LOCATION_CODES.map((code) => {
+                const stock = simpleStocks[code];
+                return (
+                  <div
+                    key={code}
+                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-700">
+                        {LOCATIONS[code].name}
+                      </p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">
+                        {code}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={stock.offered}
+                      onChange={(checked) =>
+                        simpleForm.updateStock(code, { offered: checked })
+                      }
+                      className={stock.offered ? "bg-primary" : ""}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      disabled={!stock.offered}
+                      value={stock.stock}
+                      onChange={(e) =>
+                        simpleForm.updateStock(code, {
+                          stock: parseInt(e.target.value, 10) || 0,
+                        })
+                      }
+                      aria-label={`Stock ${LOCATIONS[code].name}`}
+                      className="w-24 px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Disponibilidad por sede para combos (mock) */}
+        {MOCK_MODE && isComposed && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Disponibilidad por sede
+            </label>
+            <div className="space-y-2">
+              {LOCATION_CODES.map((code) => {
+                const stock = composedStocks[code];
+                return (
+                  <div
+                    key={code}
+                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-700">
+                        {LOCATIONS[code].name}
+                      </p>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">
+                        {code}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={stock.offered}
+                      onChange={(checked) =>
+                        updateComposedStock(code, checked)
+                      }
+                      className={stock.offered ? "bg-primary" : ""}
+                    />
+                    <div className="w-24 px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-sm text-gray-500 text-center">
+                      Calculado
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Componentes del Combo */}
         {isComposed && (

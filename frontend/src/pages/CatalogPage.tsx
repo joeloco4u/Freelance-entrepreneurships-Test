@@ -1,3 +1,4 @@
+import { Modal } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import CartDrawer from "../components/features/catalog/CartDrawer";
 import CatalogHeader from "../components/features/catalog/CatalogHeader";
@@ -6,13 +7,22 @@ import CatalogPagination from "../components/features/catalog/CatalogPagination"
 import CatalogSidebar from "../components/features/catalog/CatalogSidebar";
 import CatalogToolbar from "../components/features/catalog/CatalogToolbar";
 import CheckoutModal from "../components/features/catalog/CheckoutModal";
+import LocationPromptModal from "../components/features/catalog/LocationPromptModal";
 import { ProductGrid } from "../components/features/catalog/ProductGrid";
+import {
+  DEFAULT_LOCATION,
+  LOCATIONS,
+  type LocationCode,
+} from "../config/locations";
 import { useCart } from "../hooks/useCart";
 import { useCatalog } from "../hooks/useCatalog";
 import { useCheckout } from "../hooks/useCheckout";
+import { useSede } from "../hooks/useSede";
 
 export default function CatalogPage() {
-  const catalog = useCatalog();
+  const { sede, setSede } = useSede();
+  const activeSede = sede ?? DEFAULT_LOCATION;
+  const catalog = useCatalog(activeSede);
   const cart = useCart(catalog.allProducts);
   const checkout = useCheckout({
     cartEntries: cart.cartEntries,
@@ -22,6 +32,30 @@ export default function CatalogPage() {
   });
 
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+
+  const chooseSede = (code: LocationCode) => {
+    cart.clearCart();
+    cart.setDrawer(false);
+    setSede(code);
+  };
+
+  const handleSedeChange = (code: LocationCode) => {
+    if (code === sede) return;
+    Modal.confirm({
+      title: "Cambio de Sede",
+      content: (
+        <p>
+          Estás a punto de cambiar tu vista a la sede{" "}
+          <strong>{LOCATIONS[code].name}</strong>. Si tienes productos en tu
+          carrito, se vaciará. ¿Estás seguro?
+        </p>
+      ),
+      okText: "Sí, cambiar de sede",
+      cancelText: "Cancelar",
+      centered: true,
+      onOk: () => chooseSede(code),
+    });
+  };
 
   const {
     loading,
@@ -62,9 +96,11 @@ export default function CatalogPage() {
         onCartClick={() => cart.setDrawer(true)}
         isCartOpen={cart.drawerOpen}
         closeCart={() => cart.setDrawer(false)}
+        sede={sede}
+        onSedeChange={handleSedeChange}
       />
 
-      <CatalogHero />
+      {sede !== null && <CatalogHero sede={activeSede} />}
 
       <main className="px-4 md:px-8 py-8 pb-32">
         <CatalogToolbar
@@ -140,6 +176,8 @@ export default function CatalogPage() {
         paymentDataLoading={checkout.paymentDataLoading}
         paymentDataError={checkout.paymentDataError}
       />
+
+      <LocationPromptModal open={sede === null} onSelect={chooseSede} />
     </div>
   );
 }

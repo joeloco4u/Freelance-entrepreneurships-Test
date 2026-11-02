@@ -1,5 +1,8 @@
 import { Dropdown, type MenuProps } from "antd";
 import { ArrowDown, ArrowUp, CheckCircle2, MoreVertical, RotateCcw, User } from "lucide-react";
+import type { AdminSedeFilter } from "../../../config/locations";
+import { SedeBadge } from "../../shared/SedeBadge";
+import { SedeColumnFilter } from "../../shared/SedeColumnFilter";
 import type { GlobalSale, SaleItemDetail } from "../../../types";
 import { formatCurrency } from "../../../utils/format";
 import StatusBadge, { PaymentTypeLabel } from "../my-purchases/shared/StatusBadge";
@@ -15,6 +18,9 @@ interface Props {
   setSortOrder: (order: "asc" | "desc") => void;
   processingIds: string[];
   selectedEntId?: string | null;
+  sedeFilter: AdminSedeFilter;
+  onSedeFilterChange: (value: AdminSedeFilter) => void;
+  hasLocationData: boolean;
 }
 
 export const DetailedDesktop = (props: Props) => {
@@ -29,6 +35,9 @@ export const DetailedDesktop = (props: Props) => {
     setSortOrder,
     processingIds,
     selectedEntId,
+    sedeFilter,
+    onSedeFilterChange,
+    hasLocationData,
   } = props;
 
   const getActionMenu = (sale: GlobalSale): MenuProps => {
@@ -72,6 +81,14 @@ export const DetailedDesktop = (props: Props) => {
             <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase">
               Cliente
             </th>
+            {hasLocationData && (
+              <th scope="col" className="px-6 py-4">
+                <SedeColumnFilter
+                  value={sedeFilter}
+                  onChange={onSedeFilterChange}
+                />
+              </th>
+            )}
             <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase">
               Productos
             </th>
@@ -144,6 +161,13 @@ export const DetailedDesktop = (props: Props) => {
                   </div>
                 </div>
               </td>
+              {hasLocationData && (
+                <td className="px-6 py-4">
+                  <SedeBadge
+                    codes={sale.location_id ? [sale.location_id] : []}
+                  />
+                </td>
+              )}
               <td className="px-6 py-4">
                 {sale.sale_items
                   .filter((item: SaleItemDetail) => !selectedEntId || item.products.entrepreneurships.id === selectedEntId)

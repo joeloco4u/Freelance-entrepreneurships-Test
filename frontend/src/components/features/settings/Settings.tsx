@@ -57,6 +57,30 @@ export default function Settings() {
                   onOpenSheetsLink={openSheetsLink}
                 />
                 <SettingsHelper />
+                <div className="border-t border-gray-100">
+                  <div className="px-6 pt-6">
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold uppercase tracking-wide">
+                      Grano de Oro
+                    </span>
+                  </div>
+                  <SettingsForm
+                    disabled
+                    config={{
+                      spreadsheet_id: "",
+                      credits_sheet: "",
+                      payments_sheet: "",
+                    }}
+                    setConfig={() => undefined}
+                    saving={false}
+                    loadingSheets={false}
+                    creditsSheetOptions={[]}
+                    paymentsSheetOptions={[]}
+                    onSave={async () => undefined}
+                    onOpenSheetsLink={() => undefined}
+                    title="Sede Grano de Oro"
+                    note="Configuración pendiente de aprobación por Administración."
+                  />
+                </div>
               </>
             ),
           },

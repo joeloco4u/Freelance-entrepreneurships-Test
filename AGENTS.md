@@ -20,9 +20,10 @@ pnpm build        # tsc output to dist/
 
 ## Required Environment Setup
 
-Both `backend/.env` and `frontend/.env` must exist. Key vars:
+Both `backend/.env` and `frontend/.env` must exist for real (non-mock) mode. Key vars:
 - **Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT=3000`, `SLACK_TOKEN_SHEET_URL`
 - **Frontend**: `VITE_API_URL=http://localhost:3000`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- **Frontend (optional)**: `VITE_MOCK_MODE` — `true` | `false`. Unset or `true` keeps mock mode ON during `vite dev` (no `.env`, Supabase project, or backend needed); `false` disables it. Always OFF in production builds — **never set it in a production build job**. See `frontend/README.md` ("Desarrollo local sin backend").
 
 ## Supabase Storage
 

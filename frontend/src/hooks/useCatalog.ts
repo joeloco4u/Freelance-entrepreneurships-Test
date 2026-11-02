@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  getMockCatalogForLocation,
+  MOCK_CATEGORIES,
+} from "../config/mockData";
+import type { LocationCode } from "../config/locations";
+import { MOCK_MODE } from "../config/mockMode";
 import { getCategories } from "../services/categoryService";
 import { getActiveProducts } from "../services/productService";
 import type { CatalogProduct, Category } from "../types";
@@ -8,10 +14,12 @@ import { ERROR_MESSAGES } from "../constants/errorMessages";
 export type SortOption = "name-asc" | "name-desc" | "price-asc" | "price-desc";
 const PAGE_SIZE = 12;
 
-export function useCatalog() {
-  const [products, setProducts] = useState<CatalogProduct[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+export function useCatalog(location: LocationCode) {
+  const [remoteProducts, setRemoteProducts] = useState<CatalogProduct[]>([]);
+  const [categories, setCategories] = useState<Category[]>(() =>
+    MOCK_MODE ? MOCK_CATEGORIES : [],
+  );
+  const [loading, setLoading] = useState(!MOCK_MODE);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
@@ -20,13 +28,21 @@ export function useCatalog() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
+  const locationProducts = useMemo(
+    () => (MOCK_MODE ? getMockCatalogForLocation(location) : []),
+    [location],
+  );
+  const products = MOCK_MODE ? locationProducts : remoteProducts;
+
   useEffect(() => {
+    if (MOCK_MODE) return;
+
     let cancelled = false;
 
     Promise.all([getActiveProducts(), getCategories()])
       .then(([productsData, categoriesData]) => {
         if (cancelled) return;
-        setProducts(
+        setRemoteProducts(
           productsData.toSorted((a, b) => a.name.localeCompare(b.name)),
         );
         setCategories(categoriesData);
@@ -47,13 +63,15 @@ export function useCatalog() {
   }, []);
 
   const refreshProducts = async () => {
+    if (MOCK_MODE) return;
+
     setLoading(true);
     try {
       const [productsData, categoriesData] = await Promise.all([
         getActiveProducts(),
         getCategories(),
       ]);
-      setProducts(
+      setRemoteProducts(
         productsData.toSorted((a, b) => a.name.localeCompare(b.name)),
       );
       setCategories(categoriesData);
@@ -94,9 +112,10 @@ export function useCatalog() {
   }, [products, search, sortBy, hideOutOfStock, selectedCategory]);
 
   const totalPages = Math.ceil(filteredAndSorted.length / PAGE_SIZE);
+  const safePage = Math.min(page, Math.max(totalPages, 1));
   const paginatedProducts = filteredAndSorted.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE,
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
   );
 
   const handleSearch = (value: string) => {
@@ -120,7 +139,7 @@ export function useCatalog() {
     refreshProducts,
     loading,
     error,
-    page,
+    page: safePage,
     totalPages,
     setPage,
     search,

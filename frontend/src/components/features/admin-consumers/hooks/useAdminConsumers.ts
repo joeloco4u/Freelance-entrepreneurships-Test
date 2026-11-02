@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
+import type { AdminSedeFilter } from "../../../../config/locations";
 import { useAdminData } from "../../../../hooks/useAdminData";
 import type { SaleItemDetail } from "../../../../types";
 
-export function useAdminConsumers() {
-  const adminData = useAdminData();
+export function useAdminConsumers(sedeFilter: AdminSedeFilter = "ALL") {
+  const adminData = useAdminData(true, sedeFilter);
   const { fullConsumersSummary, sales, statusFilter, paymentMethodFilter, searchQuery } = adminData;
 
   const [view, setView] = useState<"summary" | "detailed">("summary");
@@ -70,6 +71,13 @@ export function useAdminConsumers() {
     setSelectedSales([]);
   };
 
+  const resetScopeState = () => {
+    setView("summary");
+    setSelectedUserEmail(null);
+    setSelectedSales([]);
+    adminData.clearSelection();
+  };
+
   return {
     ...adminData,
     view,
@@ -83,5 +91,6 @@ export function useAdminConsumers() {
     toggleSaleSelection,
     toggleAllVisible,
     handleBackToSummary,
+    resetScopeState,
   };
 }

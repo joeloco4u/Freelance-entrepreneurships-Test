@@ -1,14 +1,25 @@
 import { Mail, User } from "lucide-react";
+import type { AdminSedeFilter } from "../../../config/locations";
+import { SedeBadge } from "../../shared/SedeBadge";
+import { SedeColumnFilter } from "../../shared/SedeColumnFilter";
 import type { ConsumerSummary } from "../../../types";
 import { formatCurrency } from "../../../utils/format";
+
+interface Props {
+  data: ConsumerSummary[];
+  onSelect: (email: string) => void;
+  sedeFilter: AdminSedeFilter;
+  onSedeFilterChange: (value: AdminSedeFilter) => void;
+  hasLocationData: boolean;
+}
 
 export const ConsumersDesktop = ({
   data,
   onSelect,
-}: {
-  data: ConsumerSummary[];
-  onSelect: (email: string) => void;
-}) => (
+  sedeFilter,
+  onSedeFilterChange,
+  hasLocationData,
+}: Props) => (
   <div className="hidden md:block overflow-x-auto">
     <table className="w-full text-left border-collapse">
       <thead>
@@ -16,6 +27,14 @@ export const ConsumersDesktop = ({
           <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
             Empleado
           </th>
+          {hasLocationData && (
+            <th scope="col" className="px-6 py-4">
+              <SedeColumnFilter
+                value={sedeFilter}
+                onChange={onSedeFilterChange}
+              />
+            </th>
+          )}
           <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right">
             Pedidos
           </th>
@@ -47,6 +66,11 @@ export const ConsumersDesktop = ({
                 </div>
               </div>
             </td>
+            {hasLocationData && (
+              <td className="px-6 py-4">
+                <SedeBadge codes={consumer.sedes} />
+              </td>
+            )}
             <td className="px-6 py-4 text-right text-gray-500 text-sm">
               {consumer.ordersCount} compras
             </td>
