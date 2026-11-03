@@ -84,10 +84,9 @@ export function useCheckout({
     setError(null);
 
     try {
-      // 1. Mapeamos asegurándonos de que el ID sea string (UUID)
-      // Usamos String() por si acaso CatalogProduct aún lo tiene como number en algún lado
+      // 1. Mapeamos los items del carrito al formato de la API
       const items = cartEntries.map(({ product, qty }) => ({
-        product_id: String(product.id),
+        product_id: product.id,
         quantity: qty,
       }));
 

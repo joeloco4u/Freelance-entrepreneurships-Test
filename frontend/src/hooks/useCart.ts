@@ -7,12 +7,12 @@ export function useCart(allProducts: CatalogProduct[]) {
   const [cart, setCart] = useState<Cart>({});
   const [drawerOpen, setDrawer] = useState(false);
 
-  const addToCart = (id: number) => setCart((c) => ({ ...c, [String(id)]: 1 }));
+  const addToCart = (id: string) => setCart((c) => ({ ...c, [id]: 1 }));
 
-  const changeQty = (id: number, delta: number) =>
+  const changeQty = (id: string, delta: number) =>
     setCart((c) => {
-      const key = String(id);
-      const next = (c[key] ?? 0) + delta;
+      const key = id;
+      const next = (Object.hasOwn(c, key) ? (c[key] ?? 0) : 0) + delta;
       if (next <= 0) {
         const newCart = { ...c };
         delete newCart[key];
@@ -23,10 +23,10 @@ export function useCart(allProducts: CatalogProduct[]) {
       return { ...c, [key]: Math.min(next, maxStock) };
     });
 
-  const removeFromCart = (id: number) =>
+  const removeFromCart = (id: string) =>
     setCart((c) => {
       const newCart = { ...c };
-      delete newCart[String(id)];
+      delete newCart[id];
       return newCart;
     });
 

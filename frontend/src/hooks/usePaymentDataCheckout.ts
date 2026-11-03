@@ -24,7 +24,7 @@ export function usePaymentDataCheckout({
   // actual IDs haven't changed (which happens on every render in useCart).
   const productIdsKey = useMemo(() => {
     const ids = new Set<string>();
-    for (const { product } of cartEntries) ids.add(String(product.id));
+    for (const { product } of cartEntries) ids.add(product.id);
     return Array.from(ids).sort().join(",");
   }, [cartEntries]);
 

@@ -19,8 +19,8 @@ interface Props {
   entries: CartEntry[];
   total: number;
   onClose: () => void;
-  onChangeQty: (id: number, delta: number) => void;
-  onRemove: (id: number) => void;
+  onChangeQty: (id: string, delta: number) => void;
+  onRemove: (id: string) => void;
   onCheckout: () => void;
 }
 
