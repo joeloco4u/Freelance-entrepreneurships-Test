@@ -1,3 +1,7 @@
+## CRITICAL SECURITY RULES
+
+CRITICAL: NEVER push, commit, modify, or interact with the original repository (`isabeldzg/Freelance-entrepreneurships`) without explicit human approval. All automated git pushes MUST strictly target the `test` remote.
+
 # AGENTS.md
 
 ## Monorepo Commands
