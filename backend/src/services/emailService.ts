@@ -1,6 +1,28 @@
 import { Resend } from "resend";
+import { env } from "../config/env.js";
+import { AppError } from "../utils/errors.js";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let client: Resend | null = null;
+
+function getResend(): Resend {
+  if (!env.resendApiKey) {
+    throw new AppError("El envío de correos no está configurado.", 503);
+  }
+
+  if (!client) {
+    client = new Resend(env.resendApiKey);
+  }
+
+  return client;
+}
+
+function getEmailFrom(): string {
+  if (!env.emailFrom) {
+    throw new AppError("El remitente de correos no está configurado.", 503);
+  }
+
+  return env.emailFrom;
+}
 
 interface EmailOptions {
   to: string;
@@ -9,8 +31,11 @@ interface EmailOptions {
 }
 
 export async function sendEmail(options: EmailOptions): Promise<void> {
+  const resend = getResend();
+  const from = getEmailFrom();
+
   const { data, error } = await resend.emails.send({
-    from: process.env.EMAIL_FROM as string,
+    from,
     to: options.to,
     subject: options.subject,
     html: options.html,

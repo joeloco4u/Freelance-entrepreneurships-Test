@@ -18,14 +18,18 @@ El modo mock se eliminó en la limpieza de la Fase 2. Los archivos `frontend/src
 
 Requisitos para ejecutar el frontend:
 
-- **`frontend/.env`** (lo gestiona el desarrollador, nunca se versiona) con estas variables:
-  - `VITE_API_URL` (por ejemplo, `http://localhost:3000`)
+- **`frontend/.env`** (lo gestiona el desarrollador, nunca se versiona). Copia `frontend/.env.example` y completa los valores:
+  - `VITE_API_URL`: **origen** del backend, sin `/api` (el cliente añade el prefijo automáticamente). Debe apuntar al puerto del backend (**`3000`** por defecto) y coincidir con su `PORT`. En producción debe ser una URL absoluta (`https://...`).
   - `VITE_SUPABASE_URL`
   - `VITE_SUPABASE_ANON_KEY`
-- **`backend/.env`** con su propia configuración y el backend en ejecución.
+- **`backend/.env`** con su propia configuración (ver `backend/.env.example`) y el backend en ejecución.
 
 Desde la raíz del repositorio, `pnpm dev` levanta frontend y backend a la vez. `pnpm dev:front` por sí solo no tendrá datos: la interfaz arranca, pero todas las peticiones necesitan el backend y Supabase reales.
 
-Si faltan `VITE_SUPABASE_URL` o `VITE_SUPABASE_ANON_KEY`, la aplicación falla de inmediato al arrancar con el error «Faltan las variables de entorno de Supabase en el Frontend». Este comportamiento fail-closed es el esperado y no es un bug: sin esas variables no hay cliente de Supabase ni autenticación.
+Si falta `VITE_SUPABASE_URL` o `VITE_SUPABASE_ANON_KEY`, la aplicación falla de inmediato al arrancar con un mensaje que nombra la clave `VITE_` faltante y remite a `frontend/.env.example`. Este comportamiento fail-closed es el esperado y no es un bug: sin esas variables no hay cliente de Supabase ni autenticación.
 
 Todos los hooks leen ahora de la API y los servicios reales. Si una pantalla se ve vacía, significa que el backend no devolvió datos o no está accesible; no hay fixtures que la rellenen.
+
+### Si el catálogo sale vacío
+
+Si la consola del navegador muestra `GET .../products/public 404`, la URL base está mal: falta `/api` o está duplicado. El cliente añade `/api` por su cuenta sobre `VITE_API_URL`, así que la variable debe contener solo el origen del backend (por ejemplo, `http://localhost:3001`). Con la base correcta la petición sale como `http://localhost:3001/api/products/public` y el catálogo carga; si la carga falla, la interfaz muestra un estado de error con un botón «Reintentar» en lugar de un mensaje de «sin resultados».

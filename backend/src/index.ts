@@ -1,8 +1,8 @@
 import cors from "cors";
-import dotenv from "dotenv";
 import express, { type NextFunction, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
+import { env } from "./config/env.js";
 import authRouter from "./routes/authRoutes.js";
 import categoryRouter from "./routes/categoryRoutes.js";
 import composedProductRouter from "./routes/composedProductRoutes.js";
@@ -18,18 +18,15 @@ import { ipAllowlist } from "./middleware/ipAllowlist.js";
 import { respondWithError } from "./utils/errors.js";
 import { logError } from "./utils/logger.js";
 
-dotenv.config();
-
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = env.port;
 
 // Trust Render's reverse proxy so req.ip reflects the real client IP
 app.set("trust proxy", 1);
 
 // Middleware
-const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",")
-  : ["http://localhost:5173"];
+// `env` is deeply frozen, so copy the origins: cors requires a mutable array.
+const allowedOrigins = [...env.corsOrigins];
 
 app.use(
   cors({

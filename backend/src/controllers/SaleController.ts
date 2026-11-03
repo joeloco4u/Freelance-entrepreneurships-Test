@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { env } from "../config/env.js";
 import { supabaseAdmin } from "../db.js";
 import { respondWithError, toPublicError } from "../utils/errors.js";
 import { logError } from "../utils/logger.js";
@@ -619,7 +620,7 @@ export async function createSale(req: Request, res: Response) {
 
     // C. Notificar al canal de Slack vía webhook
     try {
-      const webhookUrl = process.env.SLACK_WEBHOOK_URL_IT;
+      const webhookUrl = env.slackWebhookUrlIt;
       if (webhookUrl) {
         const sellersForNotification: Array<{
           name: string;

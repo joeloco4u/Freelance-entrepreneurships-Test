@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getCategories } from "../services/categoryService";
 import { getActiveProducts } from "../services/productService";
 import type { CatalogProduct, Category } from "../types";
@@ -49,7 +49,11 @@ export function useCatalog() {
     };
   }, []);
 
+  const refreshInFlight = useRef(false);
+
   const refreshProducts = async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     setLoading(true);
     try {
       const [productsData, categoriesData] = await Promise.all([
@@ -66,6 +70,7 @@ export function useCatalog() {
         getErrorMessage(err, ERROR_MESSAGES.products.load),
       );
     } finally {
+      refreshInFlight.current = false;
       setLoading(false);
     }
   };

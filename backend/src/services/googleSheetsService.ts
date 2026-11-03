@@ -1,3 +1,4 @@
+import { env } from "../config/env.js";
 import {
   getCreditsSheet,
   getPaymentsSheet,
@@ -6,7 +7,7 @@ import {
 } from "./googleSheetsConfig.js";
 
 export async function getSlackBotTokenFromSheet(): Promise<string | null> {
-  const sheetUrl = process.env.SLACK_TOKEN_SHEET_URL;
+  const sheetUrl = env.slackTokenSheetUrl;
   if (!sheetUrl) {
     console.error("[GoogleSheets] SLACK_TOKEN_SHEET_URL no configurada");
     return null;

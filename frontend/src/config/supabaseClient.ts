@@ -7,7 +7,16 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as
 	| undefined;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-	throw new Error("Faltan las variables de entorno de Supabase en el Frontend");
+	const missingKeys = [
+		!supabaseUrl ? "VITE_SUPABASE_URL" : null,
+		!supabaseAnonKey ? "VITE_SUPABASE_ANON_KEY" : null,
+	].filter((key): key is string => key !== null);
+
+	throw new Error(
+		`Faltan las variables de entorno de Supabase en el Frontend: ${missingKeys.join(
+			", ",
+		)}. Revisa frontend/.env.example.`,
+	);
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);

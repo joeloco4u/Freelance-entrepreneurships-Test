@@ -1,9 +1,10 @@
 import { sheets_v4 } from "@googleapis/sheets";
 import { JWT } from "google-auth-library";
+import { env } from "../config/env.js";
 import { getAppConfigValue } from "./appConfigStore.js";
 
-const serviceEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "";
-const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n") || "";
+const serviceEmail = env.googleServiceAccountEmail || "";
+const privateKey = env.googlePrivateKey || "";
 
 function createAuth() {
   return new JWT({

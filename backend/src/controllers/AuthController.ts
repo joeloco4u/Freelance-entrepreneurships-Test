@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import z from "zod";
+import { env } from "../config/env.js";
 import { supabaseAdmin } from "../db.js";
 import { respondWithError } from "../utils/errors.js";
 import {
@@ -124,7 +125,7 @@ export async function SignupRequest(req: Request, res: Response) {
 					"No se pudo enviar la solicitud. Verifica los datos e intenta de nuevo.",
 			});
 
-		const webhookUrl = process.env.SLACK_WEBHOOK_URL_IT;
+		const webhookUrl = env.slackWebhookUrlIt;
 		if (webhookUrl) {
 			const template = signupRequestTemplate(
 				user_name,
@@ -182,13 +183,7 @@ export async function ApproveSignup(req: Request, res: Response) {
 			return res.status(404).json({ error: "Solicitud no encontrada" });
 		}
 
-		const appUrl = process.env.APP_URL;
-		if (!appUrl) {
-			console.error("[ApproveSignup] Falta la variable de entorno APP_URL");
-			return res
-				.status(500)
-				.json({ error: "Error al aprobar la solicitud de acceso" });
-		}
+		const appUrl = env.appUrl;
 
 		// 2. Crear el usuario en Supabase Auth
 		const rolesArray = Array.isArray(request.role)
@@ -350,11 +345,7 @@ export async function ForgotPassword(req: Request, res: Response) {
 
 		const email = parsed.data.email.toLowerCase().trim();
 
-		const appUrl = process.env.APP_URL;
-		if (!appUrl) {
-			console.error("[ForgotPassword] Falta la variable de entorno APP_URL");
-			return res.status(500).json({ error: RECOVERY_SEND_ERROR });
-		}
+		const appUrl = env.appUrl;
 
 		// generateLink builds the recovery link WITHOUT sending any email, so we can
 		// deliver it through Resend instead of Supabase's built-in mailer.

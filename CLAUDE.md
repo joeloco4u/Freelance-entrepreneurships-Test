@@ -16,7 +16,7 @@ Full-stack marketplace platform for Freelance Latin America's entrepreneurs to m
 **Root scripts:**
 - `pnpm dev` — Run frontend + backend concurrently
 - `pnpm dev:front` — Frontend only (Vite, port 5173)
-- `pnpm dev:back` — Backend only (Express, port 3001 by default)
+- `pnpm dev:back` — Backend only (Express, port 3000 by default)
 - `pnpm build` — TypeScript compilation + Vite build
 
 ---
@@ -68,6 +68,7 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 
 **Structure:**
 - `src/index.ts` — Express app setup, middleware, route mounting
+- `src/config/env.ts` — Centralized env loading + Zod validation (the only module that reads `process.env`)
 - `src/controllers/` — Business logic (Auth, Product, Sale, User, etc.)
 - `src/routes/` — Route definitions mounting controllers
 - `src/middleware/` — `auth.ts` (JWT validation), `role.ts` (RBAC), `upload.ts` (Multer)
@@ -95,7 +96,7 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 
 **Env vars:**
 ```
-PORT=3001
+PORT=3000
 SUPABASE_URL=<supabase-url>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
 CORS_ORIGIN=http://localhost:5173
@@ -109,7 +110,7 @@ GOOGLE_SERVICE_ACCOUNT_EMAIL=<email>
 GOOGLE_PRIVATE_KEY=<key>
 ```
 
-See `backend/.env.example` for the full annotated list.
+Env loading is centralized in `backend/src/config/env.ts`, which resolves `backend/.env` regardless of the working directory and validates it with Zod. See `backend/.env.example` for the full annotated list.
 
 ---
 

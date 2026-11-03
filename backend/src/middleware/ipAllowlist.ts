@@ -1,13 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
+import { env } from "../config/env.js";
 
 export function ipAllowlist(req: Request, res: Response, next: NextFunction) {
-	const raw = process.env.ALLOWED_IPS;
-	if (!raw || raw.trim() === "") return next();
-
-	const allowed = raw
-		.split(",")
-		.map((ip) => ip.trim())
-		.filter(Boolean);
+	const allowed = env.allowedIps;
+	if (allowed.length === 0) return next();
 
 	// Use the leftmost X-Forwarded-For entry (original client IP).
 	// Falls back to req.ip for direct connections (local dev).

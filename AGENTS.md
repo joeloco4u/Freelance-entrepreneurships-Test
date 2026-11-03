@@ -24,11 +24,11 @@ pnpm build        # tsc output to dist/
 
 ## Required Environment Setup
 
-Both `backend/.env` and `frontend/.env` are now REQUIRED for every mode: the application always uses the real backend and Supabase, so there is no mock or offline path. Key vars:
-- **Backend**: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PORT=3000`, `SLACK_TOKEN_SHEET_URL`
-- **Frontend**: `VITE_API_URL=http://localhost:3000`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+The application always uses the real backend and Supabase; there is no mock or offline path. Both packages ship an annotated reference file: `backend/.env.example` and `frontend/.env.example`. Copy the matching one to `.env` and fill in real values. Key vars:
+- **Backend** (`backend/.env`): required `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`; `PORT=3000` (must match the frontend `VITE_API_URL` and the Vite dev proxy); `APP_URL` (required in production, defaults to the first `CORS_ORIGIN` in development); optional `CORS_ORIGIN`, `ALLOWED_IPS`, `SLACK_TOKEN_SHEET_URL`, `SLACK_WEBHOOK_URL_IT`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`; optional email `RESEND_API_KEY`, `EMAIL_FROM`
+- **Frontend** (`frontend/.env`): `VITE_API_URL=http://localhost:3000` is the backend **origin** (no `/api` suffix — the client appends `/api`; must match the backend `PORT`; absolute URL required in production), `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
-If `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` is missing, the app fails fast at startup with "Faltan las variables de entorno de Supabase en el Frontend". This fail-closed behavior is expected. See `frontend/README.md` ("Desarrollo local con backend y Supabase reales").
+A missing `backend/.env` is not fatal (a warning is logged and process-injected vars are used), but missing or invalid required Supabase keys fail fast at boot with an error naming the resolved `backend/.env` path and every missing/invalid key. Secret values are never printed. If `VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` is missing, the app fails fast naming the missing `VITE_` key(s) and pointing to `frontend/.env.example`. This fail-closed behavior is expected. Without `RESEND_API_KEY`/`EMAIL_FROM` the server still starts; only email sending fails (503). See `frontend/README.md` ("Desarrollo local con backend y Supabase reales").
 
 ## Supabase Storage
 
@@ -38,6 +38,8 @@ Image uploads require a public bucket named `product-images` with RLS policies f
 
 - Biome config uses **tabs** for indentation and **double quotes** for JS
 - Apply with `pnpm format` in backend (frontend uses ESLint/Prettier via Vite)
+- `process.env` must be read ONLY in `backend/src/config/env.ts`; every other module imports the validated `env` object from there
+- Never create or commit `.env`; copy the matching reference file: `backend/.env.example` or `frontend/.env.example`
 
 ## Build Policy
 

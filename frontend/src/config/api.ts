@@ -1,5 +1,6 @@
 import axios from "axios";
 import { type ApiErrorResponse, AppError } from "../types";
+import { resolveApiBaseUrl } from "./apiBase";
 import { supabase } from "./supabaseClient"; // Importamos tu cliente existente
 import { looksInternal } from "../utils/errorMessage";
 import {
@@ -9,7 +10,7 @@ import {
 } from "../constants/errorMessages";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: resolveApiBaseUrl(import.meta.env.VITE_API_URL),
   headers: {
     "Content-Type": "application/json",
   },

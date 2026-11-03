@@ -59,6 +59,7 @@ export default function CatalogPage() {
 
   const {
     loading,
+    error,
     page,
     totalPages,
     setPage,
@@ -130,6 +131,8 @@ export default function CatalogPage() {
               page={page}
               products={displayProducts}
               cart={cart}
+              error={error}
+              onRetry={catalog.refreshProducts}
             />
 
             <div className="mt-10 hidden md:block">
