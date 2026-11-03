@@ -5,8 +5,6 @@ import {
   type AdminSedeFilter,
   type LocationCode,
 } from "../config/locations";
-import { MOCK_SALES } from "../config/mockData";
-import { MOCK_MODE } from "../config/mockMode";
 import { updatePayrollStatusBatch } from "../services/adminService";
 import { getAllSales } from "../services/saleService";
 import {
@@ -28,21 +26,8 @@ export function useAdminData(
   enabled: boolean = true,
   sedeFilter: AdminSedeFilter = "ALL",
 ) {
-  const [sales, setSales] = useState<GlobalSale[]>(() =>
-    MOCK_MODE
-      ? MOCK_SALES.map((sale) => ({
-          ...sale,
-          sale_items: sale.sale_items.map((item) => ({
-            ...item,
-            products: {
-              ...item.products,
-              entrepreneurships: { ...item.products.entrepreneurships },
-            },
-          })),
-        }))
-      : [],
-  );
-  const [loading, setLoading] = useState<boolean>(!MOCK_MODE && enabled);
+  const [sales, setSales] = useState<GlobalSale[]>([]);
+  const [loading, setLoading] = useState<boolean>(enabled);
   const [processingIds, setProcessingIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -118,8 +103,6 @@ export function useAdminData(
 
   const fetchData = useCallback(
     async (isSilent = false) => {
-      if (MOCK_MODE) return;
-
       if (!enabled) {
         setLoading(false);
         return;
@@ -144,8 +127,6 @@ export function useAdminData(
   );
 
   useEffect(() => {
-    if (MOCK_MODE) return;
-
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchData();
   }, [enabled, fetchData]);
@@ -170,21 +151,6 @@ export function useAdminData(
 
   const processPayroll = async (saleIds: string[]) => {
     if (saleIds.length === 0) return;
-
-    if (MOCK_MODE) {
-      setSales((prev) =>
-        prev.map((sale) =>
-          saleIds.includes(sale.id)
-            ? { ...sale, payroll_processed: true }
-            : sale,
-        ),
-      );
-      setSelectedSales((prev) => prev.filter((id) => !saleIds.includes(id)));
-      setIdsToProcess([]);
-      setIsModalOpen(false);
-      toast.success("Nómina simulada (mock mode)");
-      return;
-    }
 
     try {
       setProcessingIds((prev) => [...prev, ...saleIds]);

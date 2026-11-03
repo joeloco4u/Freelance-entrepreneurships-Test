@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { MOCK_MODE } from "../config/mockMode";
 import { getPendingRequests } from "../services/authService";
 import { getActiveSessions, getAllUsers } from "../services/usersService";
 import { getErrorMessage } from "../utils/errorMessage";
@@ -16,12 +15,10 @@ export function useITData(enabled: boolean) {
     pendingRequests: 0,
     activeSessions: 0,
   });
-  const [loading, setLoading] = useState(!MOCK_MODE);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
 
   const fetchITDashboardData = async () => {
-    if (MOCK_MODE) return;
-
     if (!enabled) {
       setLoading(false);
       return;
@@ -53,7 +50,6 @@ export function useITData(enabled: boolean) {
   };
 
   useEffect(() => {
-    if (MOCK_MODE) return;
     if (!enabled) return;
 
     let cancelled = false;

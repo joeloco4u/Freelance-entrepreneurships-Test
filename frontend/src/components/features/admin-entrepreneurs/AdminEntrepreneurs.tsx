@@ -17,7 +17,6 @@ import { exportSalesToExcel } from "../../../utils/exportToExcel";
 import { getErrorMessage } from "../../../utils/errorMessage";
 import { ERROR_MESSAGES } from "../../../constants/errorMessages";
 import type { AdminSedeFilter } from "../../../config/locations";
-import { MOCK_MODE } from "../../../config/mockMode";
 
 export default function AdminEntrepreneurs() {
   const [sedeFilter, setSedeFilter] = useState<AdminSedeFilter>("ALL");
@@ -45,21 +44,6 @@ export default function AdminEntrepreneurs() {
   const handleConfirmRefund = useCallback(
     async (itemIds: number[]) => {
       if (!refundingSale) return;
-
-      if (MOCK_MODE) {
-        const allRefunded = refundingSale.sale_items.every(
-          (item) => item.refunded || itemIds.includes(item.id),
-        );
-        logic.markItemsRefunded(refundingSale.id, itemIds);
-        if (allRefunded) {
-          toast.success("Venta reembolsada correctamente");
-        } else {
-          toast.success("Items reembolsados correctamente");
-        }
-        setRefundingSale(null);
-        logic.setSelectedSales((prev: string[]) => prev.filter((id) => id !== refundingSale.id));
-        return;
-      }
 
       try {
         setIsRefunding(true);

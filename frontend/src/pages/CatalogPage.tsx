@@ -22,7 +22,7 @@ import { useSede } from "../hooks/useSede";
 export default function CatalogPage() {
   const { sede, setSede } = useSede();
   const activeSede = sede ?? DEFAULT_LOCATION;
-  const catalog = useCatalog(activeSede);
+  const catalog = useCatalog();
   const cart = useCart(catalog.allProducts);
   const checkout = useCheckout({
     cartEntries: cart.cartEntries,

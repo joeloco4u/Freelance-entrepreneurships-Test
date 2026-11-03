@@ -8,7 +8,6 @@ import {
   LOCATIONS,
   type LocationCode,
 } from "../../../config/locations";
-import { MOCK_MODE } from "../../../config/mockMode";
 import { supabase } from "../../../config/supabaseClient";
 import { useSoftwareUpdates } from "../../../hooks/useSoftwareUpdates";
 import SoftwareUpdatesWidget from "../../layout/SoftwareUpdatesWidget";
@@ -73,14 +72,12 @@ export default function CatalogHeader({
   // (autenticados e invitados). Solo se exige que haya una sede elegida porque
   // SedeSwitcher requiere un LocationCode concreto.
   const showSwitcher = sede !== null;
-  const [isLoggedIn, setIsLoggedIn] = useState(MOCK_MODE);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const { updates, loading, unreadCount, markAsRead } = useSoftwareUpdates();
 
   useEffect(() => {
-    if (MOCK_MODE) return;
-
     const checkUser = async () => {
       const { data } = await supabase.auth.getSession();
       setIsLoggedIn(!!data.session);

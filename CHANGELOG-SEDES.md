@@ -13,6 +13,33 @@
 
 ## [Unreleased]
 
+### Removed all mock mode code for Phase 2
+
+- **Date:** `2026-11-02`
+- **Type:** `refactor`
+- **Files deleted:**
+  - `frontend/src/config/mockData.ts`
+  - `frontend/src/config/mockMode.ts`
+- **Files modified:**
+  - `frontend/src/config/supabaseClient.ts`
+  - `frontend/src/hooks/useAdminData.ts`
+  - `frontend/src/hooks/useCatalog.ts`
+  - `frontend/src/hooks/useDashboard.ts`
+  - `frontend/src/hooks/useITData.ts`
+  - `frontend/src/hooks/useProducts.ts`
+  - `frontend/src/hooks/useSoftwareUpdates.ts`
+  - `frontend/src/components/features/login/hooks/useAuth.ts`
+  - `frontend/src/components/features/catalog/CatalogHeader.tsx`
+  - `frontend/src/components/features/admin-consumers/AdminConsumers.tsx`
+  - `frontend/src/components/features/admin-entrepreneurs/AdminEntrepreneurs.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/ProductFormModal.tsx`
+  - `frontend/src/pages/CatalogPage.tsx`
+  - `frontend/README.md`
+  - `AGENTS.md`
+  - `SEDES-MASTER-PLAN.md`
+- **Description:** mock mode, the fixtures in `mockData.ts`, and every `MOCK_MODE` / `MOCK_*` / `VITE_MOCK_MODE` gate were removed from the frontend, so the application always uses the real API (`VITE_API_URL`) and real Supabase auth. Initial hook states were reset to empty/null with real loading flags instead of seeded fixtures; `useCatalog()` no longer takes a location argument, so `CatalogPage` was updated to call it without one. The `useITData` and `useProducts` loading initializers were chosen so the UI does not stay on permanent skeletons. `supabaseClient.ts` now fails closed: it throws "Faltan las variables de entorno de Supabase en el Frontend" at module load unless `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are defined. The catalog sede switcher remains public, but catalog contents do not yet vary by sede until the backend accepts a `location` parameter. Per-sede stock fields remain in the product form types but are inert (not serialized) and are a Phase 2 follow-up. `frontend/README.md`, `AGENTS.md`, and `SEDES-MASTER-PLAN.md` were updated to describe the real-only workflow and to record that mock mode was removed at the start of Phase 2.
+- **Verification:** `npx tsc -p tsconfig.app.json --noEmit` at the pre-existing 9-error baseline (`CartDrawer.tsx:153/164/181`, `EntrepreneurshipOverview.tsx:16`, `ProductFilters.tsx:41/52/63`, `UpdatesModal.tsx:60`, `CatalogPage.tsx:132`) with no new errors; targeted ESLint clean on all touched files; grep for `mock` in `frontend/src` returns zero hits; no build was run per project build policy; no backend, schema, or `.env` changes; no emojis.
+
 ### Mock software updates cleared for demo
 
 - **Date:** `2026-11-02`

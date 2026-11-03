@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MOCK_SOFTWARE_UPDATES } from "../config/mockData";
-import { MOCK_MODE } from "../config/mockMode";
 import { getCurrentMonthUpdates } from "../services/softwareUpdatesService";
 import type { SoftwareUpdate } from "../types";
 
@@ -14,17 +12,13 @@ interface UseSoftwareUpdatesReturn {
 }
 
 export function useSoftwareUpdates(): UseSoftwareUpdatesReturn {
-  const [updates, setUpdates] = useState<SoftwareUpdate[]>(() =>
-    MOCK_MODE ? MOCK_SOFTWARE_UPDATES : [],
-  );
-  const [loading, setLoading] = useState(!MOCK_MODE);
+  const [updates, setUpdates] = useState<SoftwareUpdate[]>([]);
+  const [loading, setLoading] = useState(true);
   const [lastReadAt, setLastReadAt] = useState<string | null>(() =>
     localStorage.getItem(LAST_READ_KEY),
   );
 
   useEffect(() => {
-    if (MOCK_MODE) return;
-
     const fetchData = async () => {
       try {
         const data = await getCurrentMonthUpdates();

@@ -1,10 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  getMockCatalogForLocation,
-  MOCK_CATEGORIES,
-} from "../config/mockData";
-import type { LocationCode } from "../config/locations";
-import { MOCK_MODE } from "../config/mockMode";
 import { getCategories } from "../services/categoryService";
 import { getActiveProducts } from "../services/productService";
 import type { CatalogProduct, Category } from "../types";
@@ -14,12 +8,10 @@ import { ERROR_MESSAGES } from "../constants/errorMessages";
 export type SortOption = "name-asc" | "name-desc" | "price-asc" | "price-desc";
 const PAGE_SIZE = 12;
 
-export function useCatalog(location: LocationCode) {
+export function useCatalog() {
   const [remoteProducts, setRemoteProducts] = useState<CatalogProduct[]>([]);
-  const [categories, setCategories] = useState<Category[]>(() =>
-    MOCK_MODE ? MOCK_CATEGORIES : [],
-  );
-  const [loading, setLoading] = useState(!MOCK_MODE);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
@@ -28,15 +20,9 @@ export function useCatalog(location: LocationCode) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
-  // Business rule: in mock mode the fixture array is the single source of truth.
-  // It must be returned directly, not merged with or replaced by the remote list.
-  const products: CatalogProduct[] = MOCK_MODE
-    ? getMockCatalogForLocation(location)
-    : remoteProducts;
+  const products: CatalogProduct[] = remoteProducts;
 
   useEffect(() => {
-    if (MOCK_MODE) return;
-
     let cancelled = false;
 
     Promise.all([getActiveProducts(), getCategories()])
@@ -64,8 +50,6 @@ export function useCatalog(location: LocationCode) {
   }, []);
 
   const refreshProducts = async () => {
-    if (MOCK_MODE) return;
-
     setLoading(true);
     try {
       const [productsData, categoriesData] = await Promise.all([

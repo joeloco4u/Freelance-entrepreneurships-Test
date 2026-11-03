@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
-import { MOCK_ENTREPRENEURSHIP_PRODUCTS } from "../config/mockData";
-import { MOCK_MODE } from "../config/mockMode";
 import {
   createComposedProduct,
   deleteComposedProduct,
@@ -29,10 +27,8 @@ function isComposedInput(
 }
 
 export function useProducts(entrepreneurshipId?: string) {
-  const [products, setProducts] = useState<EntrepreneurshipProduct[]>(() =>
-    MOCK_MODE ? MOCK_ENTREPRENEURSHIP_PRODUCTS : [],
-  );
-  const [loading, setLoading] = useState(!MOCK_MODE);
+  const [products, setProducts] = useState<EntrepreneurshipProduct[]>([]);
+  const [loading, setLoading] = useState(() => Boolean(entrepreneurshipId));
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("name-asc");
@@ -55,7 +51,6 @@ export function useProducts(entrepreneurshipId?: string) {
   });
 
   const fetchProducts = useCallback(async () => {
-    if (MOCK_MODE) return;
     if (!entrepreneurshipId) return;
 
     try {
@@ -73,8 +68,6 @@ export function useProducts(entrepreneurshipId?: string) {
   }, [entrepreneurshipId]);
 
   useEffect(() => {
-    if (MOCK_MODE) return;
-
     let cancelled = false;
 
     const load = async () => {
@@ -106,69 +99,10 @@ export function useProducts(entrepreneurshipId?: string) {
   const saveProduct = async (
     data: ProductInput | ComposedProductInput,
   ) => {
-    if (!MOCK_MODE && !entrepreneurshipId) return;
+    if (!entrepreneurshipId) return;
 
     setIsSaving(true);
     try {
-      // Mock-only: object URLs from picked files are intentionally leaked (dev-only).
-      if (MOCK_MODE) {
-        if (formModal.product?.id) {
-          const editingId = formModal.product.id;
-          setProducts((prev) =>
-            prev.map((product) =>
-              product.id === editingId
-                ? {
-                    ...product,
-                    name: data.name,
-                    price: data.price,
-                    is_active: data.is_active,
-                    image: data.imageFile
-                      ? URL.createObjectURL(data.imageFile)
-                      : data.image || product.image,
-                    category_id: data.category_id ?? product.category_id,
-                    stocks: data.stocks ?? product.stocks,
-                    current_stock:
-                      data.stocks?.VF.stock ??
-                      ("current_stock" in data
-                        ? data.current_stock
-                        : product.current_stock),
-                  }
-                : product,
-            ),
-          );
-          toast.success(
-            isComposedInput(data)
-              ? "Combo actualizado correctamente"
-              : "Producto actualizado correctamente",
-          );
-        } else {
-          const newProduct: EntrepreneurshipProduct = {
-            id: `mock-${Date.now()}`,
-            name: data.name,
-            price: data.price,
-            current_stock: data.stocks?.VF.stock ?? 0,
-            stocks: data.stocks,
-            image: data.imageFile
-              ? URL.createObjectURL(data.imageFile)
-              : data.image || "",
-            is_active: data.is_active,
-            entrepreneurship_id: entrepreneurshipId ?? "mock-ent-1",
-            category_id: data.category_id,
-            created_at: new Date().toISOString(),
-            is_composed: isComposedInput(data),
-          };
-          setProducts((prev) => [newProduct, ...prev]);
-          if (isComposedInput(data)) {
-            toast.success("Combo creado correctamente");
-          } else {
-            toast.success("Producto creado correctamente");
-          }
-        }
-
-        setFormModal({ isOpen: false });
-        return;
-      }
-
       if (formModal.product?.id) {
         if (isComposedInput(data)) {
           await updateComposedProduct(formModal.product.id, data);
@@ -202,7 +136,7 @@ export function useProducts(entrepreneurshipId?: string) {
   const openFormModal = useCallback((product?: EntrepreneurshipProduct) => {
     setFormModal({ isOpen: true, product });
 
-    if (!MOCK_MODE && product?.is_composed) {
+    if (product?.is_composed) {
       getComposedProductById(product.id).then((data) => {
         setFormModal((prev) => {
           if (!prev.isOpen || prev.product?.id !== product.id) return prev;
@@ -244,16 +178,6 @@ export function useProducts(entrepreneurshipId?: string) {
   const confirmDelete = async () => {
     setIsSaving(true);
     try {
-      if (MOCK_MODE) {
-        const product = products.find((p) => p.id === deleteModal.id);
-        setProducts((prev) => prev.filter((p) => p.id !== deleteModal.id));
-        toast.success(
-          product?.is_composed ? "Combo eliminado" : "Producto eliminado",
-        );
-        closeDeleteModal();
-        return;
-      }
-
       const product = products.find((p) => p.id === deleteModal.id);
       if (product?.is_composed) {
         await deleteComposedProduct(deleteModal.id);

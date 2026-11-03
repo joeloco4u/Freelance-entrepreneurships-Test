@@ -36,7 +36,7 @@ Rule 4 was revised on 2026-11-02 by explicit product decision: the catalog sede 
 - **User-facing copy is Spanish.** Location display names come from the existing configuration (`Valle Frío`, `Grano de Oro`) and are rendered in title case in the hero subtitle.
 - **The hook is `useSede`.** Never `useLocation`, which is reserved by `react-router`. Sede detection lives in `useSede`, backed by `localStorage` (`hq_location`). There is no URL handling.
 - **No emojis anywhere:** not in code, not in UI copy, not in commit messages, not in documentation.
-- **Mock mode (`MOCK_MODE`) must keep working in every phase.** A phase that breaks the offline development path is not complete.
+- **Mock mode was removed on 2026-11-02 at the start of Phase 2.** Every phase must run against the real Supabase and backend services; there are no fixtures, no `MOCK_MODE` flag, and no mock-injection path. A phase that depends on offline fixtures is not complete.
 
 ## Current state of the codebase
 
@@ -97,6 +97,8 @@ The target model separates identity, offering, and quantity. No SQL is prescribe
 
 **Status: COMPLETED (2026-10-31).**
 
+**Revision note (2026-11-02):** mock mode and all mock fixtures referenced in this Phase 1 section were removed on 2026-11-02 when Phase 2 began. The mock-related references below are historical and describe the implementation as it existed in Phase 1; they are no longer current behavior and must not be used as a development path.
+
 #### Objective
 
 Let the public catalog be scoped to a sede during onboarding and persisted in localStorage, with mock data per sede, without touching the backend or the schema.
@@ -140,7 +142,7 @@ To demo the first-visit flow, clear `hq_location` in DevTools (Application -> Lo
 
 ### Phase 2 — Data architecture (database and API read contract)
 
-**Status: Pending. This is the highest-risk phase; see the dedicated section below.**
+**Status: Pending. This is the highest-risk phase; see the dedicated section below.** Mock mode was removed on 2026-11-02 at the start of this phase, so all work now runs against real Supabase and backend services.
 
 #### Objective
 
@@ -185,18 +187,17 @@ Make the catalog consume the validated location contract and guarantee that the 
 
 #### Scope
 
-- **In:** catalog consuming the validated location from the API, the visibility rule (association exists means offered; zero stock stays visible and unsellable), cart bound to one sede, clearing or re-keying the cart on any sede change, checkout payload carrying the location on the client side, mock-mode checkout fixtures.
-- **Out:** the server-side transaction, stock deduction, refund restoration, trigger/RPC work (Phase 4); admin surfaces and the product form (Phase 5); per-location pricing; stock transfers.
+- **In:** catalog consuming the validated location from the API, the visibility rule (association exists means offered; zero stock stays visible and unsellable), cart bound to one sede, clearing or re-keying the cart on any sede change, checkout payload carrying the location on the client side.
+- **Out:** the server-side transaction, stock deduction, refund restoration, trigger/RPC work (Phase 4); admin surfaces and the product form (Phase 5); per-location pricing; stock transfers; fixtures or offline checkout.
 
 #### Work items
 
 - Thread the validated location from `useSede` into catalog fetching and into the cart's identity.
-- Render only products whose association exists for the active sede. The per-sede mock stock map already models this; the real path must match the same rule once the API exposes it.
+- Render only products whose association exists for the active sede. The real path must enforce this rule once the API exposes per-sede offerings.
 - Keep zero-stock products visible and make them unsellable at the UI boundary.
 - Re-key or clear the cart whenever the effective sede changes by any mechanism: an explicit switcher confirmation, a sede change made in another tab, or clearing storage. The current implementation only clears on a confirmed switcher change.
 - Known limitation: the sede is a per-browser preference and last-writer-wins across tabs; it is re-read only on load. Carts are per-tab and in-memory.
 - Include exactly one location in the checkout payload sent by the client.
-- Keep mock-mode checkout functional offline with per-sede fixtures.
 - Keep the user-facing copy Spanish.
 
 #### Acceptance criteria
@@ -205,7 +206,7 @@ Make the catalog consume the validated location contract and guarantee that the 
 - A product not offered in the active sede is absent from the catalog.
 - A zero-stock product is visible and unsellable.
 - The checkout payload carries exactly one location.
-- Mock checkout works offline.
+- Checkout runs against the real backend, with no fixtures or offline fallback.
 
 ### Phase 4 — Secure checkout (backend)
 
@@ -244,7 +245,7 @@ Make sale creation a single, location-aware, atomic backend operation whose stoc
 
 ### Phase 5 — Backoffice management
 
-**Status: Pending.** The frontend mock UI was implemented on 2026-11-01; see "Phase 5 implementation status" below.
+**Status: Pending.** The frontend UI shell was implemented on 2026-11-01; see "Phase 5 implementation status" below.
 
 #### Objective
 
@@ -257,7 +258,7 @@ Give administrators per-sede management of offerings, stock, payroll, and report
 
 #### Work items
 
-- Add the per-sede offered toggle and stock fields to the product form. Until Phase 2/4 add and return `location_id` and the per-location stock contract, this is a mock-only per-sede offered/stock matrix. Composed products show computed availability read-only and are never edited directly.
+- Add the per-sede offered toggle and stock fields to the product form. Until Phase 2/4 add and return `location_id` and the per-location stock contract, this is an inert per-sede offered/stock matrix (the fields exist but are not serialized). Composed products show computed availability read-only and are never edited directly.
 - Add a dedicated stock endpoint instead of overloading the multipart product route.
 - Show offering per sede (`VF`/`GO`) in product lists.
 - Add a "Sede" column to the Entrepreneurs summary, the Consumers summary, and both detailed Sales tables, with a compact Ant Design `Select` (`Todas` / `VF` / `GO`) in the column header.
@@ -266,7 +267,7 @@ Give administrators per-sede management of offerings, stock, payroll, and report
 - Reset scope-bound page-local state (selection, `idsToProcess`, payroll modal, detailed view, selected entity/user, open refund modal) whenever the filter changes, so a batch payroll or refund never acts on rows hidden by the new filter.
 - Show the `GO` configuration as a visually distinct, disabled copy of the VF Google Sheets fields, with an empty `AppConfig` and no keys created. `useSettings` stays single-location.
 - Apply low-stock alert wording per sede.
-- Include the sede in exports (deferred; not part of this phase's mock UI).
+- Include the sede in exports (deferred; not part of this phase's frontend UI).
 - Keep `products.current_stock` as the VF mirror; do not reintroduce per-location data into it.
 - Closing cleanup item: migrate every remaining `products.current_stock` consumer and remove the column in a versioned migration with a rollback path. The removal belongs to this phase, not to a separate one.
 
@@ -280,7 +281,7 @@ Give administrators per-sede management of offerings, stock, payroll, and report
 - A selection cannot survive a filter change: payroll and refunds never act on rows hidden by the new filter.
 - The Sede column and filter are hidden when no sale carries `location_id`.
 - The settings tab shows the `GO` configuration as an inert, disabled empty block, and no `GO` configuration keys are created while the decision is deferred.
-- The per-sede offered/stock matrix is visible in mock mode, and real mode is visually unchanged until Phase 2/4 return `location_id`.
+- The per-sede offered/stock matrix renders as an inert placeholder until Phase 2/4 return `location_id`; real mode is otherwise visually unchanged.
 - No code reads `products.current_stock` as the source of truth while it is retained as the VF mirror; the column is removed in the cleanup item.
 - No deferred decision was implemented without an explicit resolution recorded in this document.
 
@@ -326,7 +327,7 @@ If the extracted trigger's behavior cannot be fully explained, stop. Do not proc
 
 ## Cross-cutting guardrails
 
-- **Mock mode is non-negotiable.** `MOCK_MODE` must keep working in every phase; a change that requires a backend to render the app is incomplete.
+- **Real services are non-negotiable.** Every phase must run against the real Supabase and backend services; a change that requires fixtures or mock-injection to render the app is incomplete.
 - **The changelog is the final step of every Sedes task.** No Sedes task is complete until `CHANGELOG-SEDES.md` has an entry with date, files, behavior change, and verification.
 - **Deploy order is fixed:** backend first in a backward-compatible form, then frontend, then make `location` required. Never ship a required parameter before a backend that accepts it exists.
 - **No Redux and no new state manager.** Use custom hooks, early returns, and the existing Tailwind/AntD patterns.
@@ -334,19 +335,6 @@ If the extracted trigger's behavior cannot be fully explained, stop. Do not proc
 - **Tests are currently absent.** Phase 2 must add integration coverage for the trigger/RPC path; later phases expand it.
 - **One sale, one location.** Any implementation that can represent a mixed sale is invalid, regardless of UI safeguards.
 - **Sede detection is a local preference, not an authorization control.** The backend must validate any sede used for stock, pricing, or sales. This is why the catalog header switcher is public to every user, authenticated or guest (locked rule 4).
-
-### Production mock mode (Vercel demo deployments)
-
-Mock mode was previously gated by `import.meta.env.DEV`, so `vite build` statically replaced `DEV` with `false`, `MOCK_MODE` folded to `false`, the mock branches and fixtures were dead-code-eliminated, the catalog took the real API path, and a backend-less Vercel deployment rendered "No encontramos lo que buscas". The current behavior is:
-
-- `frontend/src/config/mockMode.ts` computes `MOCK_MODE` as `explicitMock || devDefault`, where `explicitMock` is `import.meta.env.VITE_MOCK_MODE === "true"` and `devDefault` is `import.meta.env.DEV && import.meta.env.VITE_MOCK_MODE !== "false"`.
-- `VITE_MOCK_MODE=true` at **build time** is an explicit opt-in honored in **any** build, including a production/Vercel build.
-- The development default is unchanged: mocks are ON in `vite dev` unless `VITE_MOCK_MODE=false`.
-- The value is baked in at build time; it is not read at runtime, so changing it requires a rebuild.
-- For a real production deployment with a live backend, `VITE_MOCK_MODE` must be unset or `false`.
-- The current backend-less Vercel demo must define `VITE_MOCK_MODE=true` in the project's build environment variables.
-
-Trade-off: in a mock production build the app shows fixture data and the mock `ADMIN`/`IT` identity, so the UI is representative but not authoritative. Backend authorization still rejects real requests, so a mock production build is never a substitute for a real deployment.
 
 ## Deferred decisions
 
@@ -367,13 +355,13 @@ These are open. Do not implement them, and do not assume an answer to them.
 | 2 | Data architecture (database and API read contract) | Pending | — |
 | 3 | Catalog and cart isolation (frontend) | Pending | — |
 | 4 | Secure checkout (backend) | Pending | — |
-| 5 | Backoffice management | Pending (mock UI implemented) | Mock UI 2026-11-01 |
+| 5 | Backoffice management | Pending (UI shell implemented) | UI shell 2026-11-01 |
 
 ## Phase 5 implementation status
 
-The frontend mock UI for Phase 5 was implemented on **2026-11-01**. It covers the table-level Sede columns and filters, the inert GO settings block, and the per-sede offered/stock matrix in the product form, all in mock data.
+The frontend UI shell for Phase 5 was implemented on **2026-11-01**. It covers the table-level Sede columns and filters, the inert GO settings block, and the per-sede offered/stock matrix in the product form.
 
-The phase remains **Pending** until the real `location_id` data and the Phase 2/4 backend land. Until then, real mode renders no Sede column or filter (sales do not yet carry `location_id`), the GO settings block stays inert, and the product matrix is mock-only.
+The phase remains **Pending** until the real `location_id` data and the Phase 2/4 backend land. Until then, real mode renders no Sede column or filter (sales do not yet carry `location_id`), the GO settings block stays inert, and the product matrix is inert because its per-sede fields are not serialized.
 
 ## Agent checklist
 
@@ -383,7 +371,7 @@ Before starting work on any phase, confirm each item:
 - [ ] Read `CHANGELOG-SEDES.md` and identify the last shipped state.
 - [ ] Verify the current phase status in the table above; do not start a phase out of order without an explicit instruction.
 - [ ] Confirm that no deferred decision is being assumed or silently implemented.
-- [ ] Confirm the change preserves `MOCK_MODE`.
+- [ ] Confirm the change runs against the real Supabase and backend services and does not reintroduce fixtures or mock-injection.
 - [ ] Confirm the change obeys the seven locked business rules.
 - [ ] For Phase 2 and Phase 4, confirm the trigger has been extracted and reviewed before any schema edit or checkout rewrite.
 - [ ] Update `CHANGELOG-SEDES.md` as the final step, with verification.

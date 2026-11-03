@@ -1,19 +1,13 @@
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
-import { MOCK_AUTH_USER, MOCK_ROLES } from "../../../../config/mockData";
-import { MOCK_MODE } from "../../../../config/mockMode";
 import { supabase } from "../../../../config/supabaseClient";
 import type { UserRole } from "../../../../types";
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(() =>
-    MOCK_MODE ? MOCK_AUTH_USER : null,
-  );
-  const [loading, setLoading] = useState(!MOCK_MODE);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (MOCK_MODE) return;
-
     let mounted = true;
 
     // 1. Obtener sesión inicial
@@ -46,13 +40,6 @@ export function useAuth() {
    * gracias al listener onAuthStateChange.
    */
   const logout = async () => {
-    if (MOCK_MODE) {
-      setUser(null);
-      // Mock auth re-seeds on reload; navigate away so the logout is visible.
-      window.location.assign("/login");
-      return;
-    }
-
     try {
       await supabase.auth.signOut();
     } catch (error) {
@@ -61,7 +48,6 @@ export function useAuth() {
   };
 
   const getRoles = (): UserRole[] => {
-    if (MOCK_MODE) return user ? [...MOCK_ROLES] : [];
     if (!user) return [];
     const metadata = user.user_metadata || {};
     const rawRoles = metadata.role || metadata.roles || [];
