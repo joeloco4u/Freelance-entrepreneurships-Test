@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import type { LocationCode } from "../config/locations";
 import { createSale } from "../services/saleService";
 import type { CatalogProduct, Consumer } from "../types";
 import { getConsumersList } from "../services/usersService";
@@ -14,6 +15,7 @@ interface UseCheckoutProps {
   clearCart: () => void;
   refreshProducts: () => Promise<void>;
   closeCartDrawer: () => void;
+  location: LocationCode;
 }
 
 export function useCheckout({
@@ -21,6 +23,7 @@ export function useCheckout({
   clearCart,
   refreshProducts,
   closeCartDrawer,
+  location,
 }: UseCheckoutProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [status, setStatus] = useState<ModalStatus>("idle");
@@ -38,6 +41,8 @@ export function useCheckout({
     "efectivo" | "binance" | "pago_movil" | null
   >(null);
   const [note, setNote] = useState<string>("");
+
+  const locationSnapshotRef = useRef<LocationCode | null>(null);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -58,6 +63,7 @@ export function useCheckout({
   }, [modalOpen]);
 
   const handleOpenCheckout = () => {
+    locationSnapshotRef.current = location;
     closeCartDrawer();
     setModalOpen(true);
   };
@@ -75,6 +81,11 @@ export function useCheckout({
   };
 
   const handleConfirmPurchase = async () => {
+    if (cartEntries.length === 0) {
+      setError("Tu carrito está vacío. Vuelve a agregar productos.");
+      return;
+    }
+
     if (!selectedConsumerId) {
       setError("Por favor selecciona un comprador.");
       return;
@@ -82,6 +93,8 @@ export function useCheckout({
 
     setStatus("loading");
     setError(null);
+
+    const locationId = locationSnapshotRef.current ?? location;
 
     try {
       // 1. Mapeamos los items del carrito al formato de la API
@@ -97,12 +110,13 @@ export function useCheckout({
         payment_type: paymentType,
         payment_method: paymentType === "immediate" ? paymentMethod : undefined,
         note: note.trim() || undefined,
+        location_id: locationId,
       });
 
       // 3. Post-compra
-      await refreshProducts();
       clearCart();
       setStatus("success");
+      void refreshProducts(); // best-effort catalog sync; must not gate success
     } catch (err: unknown) {
       // Capturamos el error del backend (ej: falta de stock)
       setError(

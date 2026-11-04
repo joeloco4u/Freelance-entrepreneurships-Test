@@ -29,7 +29,8 @@ export default function LocationPromptModal({ open, onSelect }: Props) {
     >
       <p className="text-sm text-gray-500 mb-6">
         Selecciona la sede desde la que estás comprando. Esta elección se
-        guardará en este equipo.
+        guardará en este equipo, pero podrás cambiar de sede cuando quieras
+        desde el menú.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

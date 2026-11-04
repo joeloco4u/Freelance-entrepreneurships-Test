@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   isLocationCode,
   SEDE_STORAGE_KEY,
@@ -20,6 +20,19 @@ export function useSede() {
   const [sede, setSedeState] = useState<LocationCode | null>(() =>
     readStoredSede(),
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea && event.storageArea !== window.localStorage) return;
+      if (event.key !== null && event.key !== SEDE_STORAGE_KEY) return;
+      setSedeState(readStoredSede());
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   const setSede = (code: LocationCode) => {
     if (!isLocationCode(code)) return;

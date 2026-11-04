@@ -13,6 +13,74 @@
 
 ## [Unreleased]
 
+### Phase 3 — catalog and cart isolation by sede
+
+- **Date:** `2026-11-03`
+- **Type:** `feat` (frontend)
+- **Scope:** Phase 3 — catalog and cart isolation by sede (frontend only; the backend contract shipped in Phase 2).
+- **Files added:** none.
+- **Files modified:**
+  - `frontend/src/services/productService.ts`
+  - `frontend/src/hooks/useCatalog.ts`
+  - `frontend/src/hooks/useCheckout.ts`
+  - `frontend/src/hooks/useCart.ts`
+  - `frontend/src/hooks/useSede.ts`
+  - `frontend/src/pages/CatalogPage.tsx`
+  - `frontend/src/types/index.ts`
+  - `SEDES-MASTER-PLAN.md`
+- **Description:** the catalog and the cart are now bound to a single sede before any sale is submitted. Behavior changes:
+  - `getActiveProducts(sede, signal?)` now requires a `LocationCode` and requests `GET /api/products/public?sede=VF|GO`, so every catalog request carries the active sede.
+  - `useCatalog(sede: LocationCode | null)` does not fetch until a sede is chosen, refetches when the sede changes, and exposes a derived `settledSede` / `isStale` guard that returns an empty product list with `loading: true` until the new sede's response lands. The previous sede's products and stock can no longer render under the new header, including from page 2 or later.
+  - A monotonic request token plus an `AbortController` discard late responses, and `refreshProducts` always targets the current sede through a ref, so a late post-checkout refresh cannot overwrite the active sede's data.
+  - Categories are fetched independently of products; a category failure is non-fatal and keeps the last loaded categories instead of breaking the product load. The page resets to 1 on every sede change, while search, sort, hide-out-of-stock, and the selected category are preserved.
+  - `useCheckout` now requires a `location: LocationCode` prop, snapshots the location when the checkout modal opens, rejects an empty cart before any API call, and sends `location_id` in the `createSale` payload. On success it clears the cart and shows the success state before a best-effort catalog refresh.
+  - `CatalogPage` passes the nullable `sede` to `useCatalog(sede)` and `useCart(allProducts, sede)`, passes `activeSede` to `useCheckout`, closes an open checkout when the sede changes, and renders the catalog content only once a sede exists, so no empty-state flash appears behind the onboarding modal.
+  - `useCart` resets the cart and closes the drawer whenever the sede changes (every path), and `cartCount` is derived from the visible cart entries.
+  - `useSede` syncs the sede across tabs through a `localStorage` `storage` listener that ignores `sessionStorage`, so a change made in another tab also resets this tab's catalog and cart.
+  - Types: `CreateSalePayload.location_id` is required; `Sale.location_id` is optional.
+- **Status:** working-tree changes; not committed and not pushed.
+- **Verification:** `tsc --noEmit -p frontend/tsconfig.app.json` stays at the 5 pre-existing errors with 0 new ones; ESLint clean on the changed files.
+- **Known pending items:**
+  - Provider and admin product views still default to `VF`; per-sede administration is Phase 5.
+  - `location_id` is client-chosen until Phase 4 derives and validates it server-side.
+  - The backend temporary `VF` fallback can now be removed once this ships.
+
+### Phase 2 — backend API migration to `product_stock`
+
+- **Date:** `2026-11-03`
+- **Type:** `feat` (backend)
+- **Scope:** Phase 2 — backend API migration from `products.current_stock` to `product_stock`.
+- **Files added:**
+  - `backend/src/config/locations.ts`
+- **Files modified:**
+  - `backend/src/controllers/SaleController.ts`
+  - `backend/src/controllers/ProductController.ts`
+  - `backend/src/controllers/ComposedProductController.ts`
+  - `backend/src/schemas/schema.ts`
+  - `backend/src/utils/errors.ts`
+  - `backend/src/services/notificationService.ts`
+  - `backend/src/services/slackService.ts`
+  - `SEDES-MASTER-PLAN.md`
+- **Description:** the backend no longer depends on the frozen `products.current_stock` column and now reads from and writes to `product_stock(product_id, location_id, stock)`. Behavior changes:
+  - New `backend/src/config/locations.ts` with `LOCATION_CODES = ["VF", "GO"]`, `DEFAULT_LOCATION = "VF"`, and the `parseLocation` / `isLocationCode` helpers.
+  - `POST /api/sales` receives and validates `location_id` (zod `SaleRequestSchema`), writes it to `sales`, checks that every item is offered at that sede, validates cumulative demand (components shared across cart lines), rejects non-positive quantities, caps the cart at 100 items, and no longer runs the post-insert TOCTOU check. A **temporary fallback to `VF` with a warning** remains only when `location_id` is missing (the frontend does not send it yet).
+  - Refunds restore `product_stock` at the sale's sede idempotently (items already refunded are skipped; the row is marked first and restored afterwards), and composed products restore their components.
+  - `GET /api/products/public` accepts `?sede=VF|GO` (defaults to `VF`, returns 400 when invalid), inner joins `product_stock` at that sede (products without a row are excluded; stock `0` remains visible), and keeps the `current_stock` field name mapped from that sede's stock.
+  - `GET /api/products` (ADMIN/IT) returns `current_stock` plus a per-sede `stocks` map.
+  - `GET /api/products/:id` and the provider listing return `current_stock` mapped from the requested sede or the default one (no `stocks` map, to limit exposure).
+  - `enrichComposedStock(products, location)` computes availability from component stock at that sede, in batches (no N+1), and returns `0` for recipes with invalid quantities.
+  - Creating a product (simple or composed) or updating a simple product's stock now also writes the `VF` row in `product_stock`; `products.current_stock` is kept only as a temporary write-only bridge. Composed-product updates do not write stock, because their availability is derived.
+  - Low-stock notifications use the post-trigger stock, and every sale read endpoint (`getAllSales` and the per-entrepreneurship, per-consumer, and by-id reads) returns `location_id`.
+  - Input limits: at most 50 components and at most 100 items. New 409 mapping for check violations ("Stock insuficiente…").
+- **Status:** working-tree changes; not committed and not pushed.
+- **Verification:** `tsc --noEmit -p backend/tsconfig.json` exits with code 0; Biome lint reports 7 pre-existing warnings and 0 new ones.
+- **Known pending items:**
+  - Atomic increment RPC for refunds.
+  - Versioned migrations and the trigger definition committed to the repository.
+  - RLS verification on `product_stock`.
+  - Remove the `VF` fallback once the frontend sends `location_id`.
+  - Per-sede administration matrix (Phase 5).
+
 ### Removed all mock mode code for Phase 2
 
 - **Date:** `2026-11-02`

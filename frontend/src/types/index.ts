@@ -245,6 +245,7 @@ export interface CreateSalePayload {
   payment_type?: PaymentType;
   payment_method?: PaymentMethod;
   note?: string;
+  location_id: LocationCode;
 }
 
 export interface SaleItemPayload {
@@ -261,6 +262,7 @@ export interface Sale {
   created_at: string;
   payment_type: PaymentType;
   payment_method?: PaymentMethod | null;
+  location_id?: LocationCode;
 }
 
 export interface SaleItemDetail {

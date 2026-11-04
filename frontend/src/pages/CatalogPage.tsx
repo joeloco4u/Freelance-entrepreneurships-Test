@@ -22,18 +22,20 @@ import { useSede } from "../hooks/useSede";
 export default function CatalogPage() {
   const { sede, setSede } = useSede();
   const activeSede = sede ?? DEFAULT_LOCATION;
-  const catalog = useCatalog();
-  const cart = useCart(catalog.allProducts);
+  const catalog = useCatalog(sede);
+  const cart = useCart(catalog.allProducts, sede);
   const checkout = useCheckout({
     cartEntries: cart.cartEntries,
     clearCart: cart.clearCart,
     refreshProducts: catalog.refreshProducts,
     closeCartDrawer: () => cart.setDrawer(false),
+    location: activeSede,
   });
 
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
   const chooseSede = (code: LocationCode) => {
+    checkout.handleCloseModal();
     cart.clearCart();
     cart.setDrawer(false);
     setSede(code);
@@ -103,48 +105,50 @@ export default function CatalogPage() {
 
       {sede !== null && <CatalogHero sede={activeSede} />}
 
-      <main className="px-4 md:px-8 py-8 pb-32">
-        <CatalogToolbar
-          search={catalog.search}
-          onSearch={catalog.handleSearch}
-          onOpenFilters={() => setIsFiltersOpen(true)}
-        />
-
-        <div className="flex flex-col md:flex-row gap-10">
-          <CatalogSidebar
-            categories={catalog.categories}
-            selectedCategory={catalog.selectedCategory}
-            setSelectedCategory={catalog.setSelectedCategory}
-            sortBy={catalog.sortBy}
-            setSortBy={catalog.setSortBy}
-            hideOutOfStock={catalog.hideOutOfStock}
-            setHideOutOfStock={catalog.setHideOutOfStock}
-            clearFilters={catalog.clearFilters}
-            hasFilters={catalog.hasFilters}
-            isOpen={isFiltersOpen}
-            onClose={() => setIsFiltersOpen(false)}
+      {sede !== null && (
+        <main className="px-4 md:px-8 py-8 pb-32">
+          <CatalogToolbar
+            search={catalog.search}
+            onSearch={catalog.handleSearch}
+            onOpenFilters={() => setIsFiltersOpen(true)}
           />
 
-          <section className="flex-1">
-            <ProductGrid
-              loading={loading}
-              page={page}
-              products={displayProducts}
-              cart={cart}
-              error={error}
-              onRetry={catalog.refreshProducts}
+          <div className="flex flex-col md:flex-row gap-10">
+            <CatalogSidebar
+              categories={catalog.categories}
+              selectedCategory={catalog.selectedCategory}
+              setSelectedCategory={catalog.setSelectedCategory}
+              sortBy={catalog.sortBy}
+              setSortBy={catalog.setSortBy}
+              hideOutOfStock={catalog.hideOutOfStock}
+              setHideOutOfStock={catalog.setHideOutOfStock}
+              clearFilters={catalog.clearFilters}
+              hasFilters={catalog.hasFilters}
+              isOpen={isFiltersOpen}
+              onClose={() => setIsFiltersOpen(false)}
             />
 
-            <div className="mt-10 hidden md:block">
-              <CatalogPagination
+            <section className="flex-1">
+              <ProductGrid
+                loading={loading}
                 page={page}
-                totalPages={totalPages}
-                setPage={setPage}
+                products={displayProducts}
+                cart={cart}
+                error={error}
+                onRetry={catalog.refreshProducts}
               />
-            </div>
-          </section>
-        </div>
-      </main>
+
+              <div className="mt-10 hidden md:block">
+                <CatalogPagination
+                  page={page}
+                  totalPages={totalPages}
+                  setPage={setPage}
+                />
+              </div>
+            </section>
+          </div>
+        </main>
+      )}
 
       <CartDrawer
         isOpen={cart.drawerOpen}

@@ -1,11 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { LocationCode } from "../config/locations";
 import type { CatalogProduct } from "../types";
 
 type Cart = Record<string, number>;
 
-export function useCart(allProducts: CatalogProduct[]) {
+export function useCart(
+  allProducts: CatalogProduct[],
+  sede: LocationCode | null,
+) {
   const [cart, setCart] = useState<Cart>({});
   const [drawerOpen, setDrawer] = useState(false);
+
+  useEffect(() => {
+    // El carrito pertenece a una sede: al cambiarla se descarta por completo.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCart({});
+    setDrawer(false);
+  }, [sede]);
 
   const addToCart = (id: string) => setCart((c) => ({ ...c, [id]: 1 }));
 
@@ -40,7 +51,7 @@ export function useCart(allProducts: CatalogProduct[]) {
     })
     .filter((e): e is { product: CatalogProduct; qty: number } => e !== null);
 
-  const cartCount = Object.values(cart).reduce((s, q) => s + q, 0);
+  const cartCount = cartEntries.reduce((s, { qty }) => s + qty, 0);
   const cartTotal = cartEntries.reduce(
     (s, { product, qty }) => s + product.price * qty,
     0,

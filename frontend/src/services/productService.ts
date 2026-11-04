@@ -1,4 +1,5 @@
 import api from "../config/api";
+import type { LocationCode } from "../config/locations";
 import type {
   CatalogProduct,
   EntrepreneurshipProduct,
@@ -56,8 +57,14 @@ export const updateProduct = async (
 };
 
 // Estas funciones se mantienen igual ya que no envían archivos
-export async function getActiveProducts(): Promise<CatalogProduct[]> {
-  const { data } = await api.get<CatalogProduct[]>("/products/public");
+export async function getActiveProducts(
+  sede: LocationCode,
+  signal?: AbortSignal,
+): Promise<CatalogProduct[]> {
+  const { data } = await api.get<CatalogProduct[]>("/products/public", {
+    params: { sede },
+    signal,
+  });
   return data;
 }
 

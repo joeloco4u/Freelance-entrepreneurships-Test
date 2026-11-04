@@ -62,8 +62,8 @@ The target model separates identity, offering, and quantity. No SQL is prescribe
 ### `product_stock`
 
 - Composite key: (`product_id`, `location_id`).
-- `quantity`: numeric, with a non-negative check constraint.
-- **Row existence means "offered in that location."** A missing row means the product is not offered and therefore hidden there. A row with quantity `0` means offered and visible but unsellable.
+- `stock`: numeric, with a non-negative check constraint. This is the implemented column name; the earlier plan called it `quantity`.
+- **The existence of the row means "offered at that sede".** A missing row means the product is not offered and is therefore hidden there. A row with `stock` `0` means offered and visible, but not sellable.
 
 ### `sales.location_id`
 
@@ -79,16 +79,16 @@ The target model separates identity, offering, and quantity. No SQL is prescribe
 
 ### `products.current_stock`
 
-- Becomes a legacy, read-only field during migration.
-- Removed only after every consumer has migrated to `product_stock`.
-- Reintroducing per-location data into this column is forbidden.
+- It is a **write-only** compatibility bridge: it is written only on product creation or update; the trigger no longer maintains it and no code reads it. The source of truth for stock is `product_stock`.
+- It is removed in Phase 5, once every consumer has migrated.
+- Reintroducing per-sede data into this column is forbidden.
 
 ### API contract direction
 
-- Catalog endpoints accept a validated `location` parameter.
+- Catalog endpoints accept the validated `?sede` parameter (values `VF` / `GO`). The frontend sends `?sede` on every catalog request; the backend default of `VF` remains only as a temporary backward-compatible fallback.
 - In catalog responses, `current_stock` means **stock at the requested location**, preserving the client field name.
 - Backoffice endpoints return a per-location stocks map rather than a single scalar, so the administration surface can present a unified view.
-- Sale creation accepts the location and records it on the sale header; the server validates that every item is offered at that location.
+- Sale creation accepts the location and records it on the sale header; the server validates that every item is offered at that location. The frontend sends `location_id` in the checkout payload; the value is still client-chosen until Phase 4 derives and validates it server-side.
 - The admin `location` filter remains a server-side follow-up (`GET /sales?location=`); client-side filtering is explicitly accepted for Phase 5.
 
 ## The five phases
@@ -142,7 +142,7 @@ To demo the first-visit flow, clear `hq_location` in DevTools (Application -> Lo
 
 ### Phase 2 — Data architecture (database and API read contract)
 
-**Status: Pending. This is the highest-risk phase; see the dedicated section below.** Mock mode was removed on 2026-11-02 at the start of this phase, so all work now runs against real Supabase and backend services.
+**Status: In progress — the backend API migration is implemented in code; versioned migrations and the committed trigger definition, RLS verification on `product_stock`, and the frontend `?sede` integration (implemented in code, commit pending) remain. This is the highest-risk phase; see the dedicated section below.** Mock mode was removed on 2026-11-02 at the start of this phase, so all work now runs against real Supabase and backend services.
 
 #### Objective
 
@@ -161,7 +161,7 @@ Create the real multi-location schema, backfill all existing data to `VF`, and m
 - Backfill `product_stock` from `products.current_stock` for `VF`; `GO` is created empty.
 - Add `sales.location_id` as nullable, backfill every existing row to `VF`, then set it `NOT NULL`.
 - Rewrite the trigger to resolve the location from the sale and update `product_stock` instead of `products.current_stock`.
-- Keep `products.current_stock` readable throughout; write to it only as a temporary compatibility bridge if strictly required.
+- Keep `products.current_stock` until Phase 5 as a **write-only** compatibility bridge: it is written only on product create/update, the trigger does not maintain it, and nothing reads it. The framing is temporary, and it must never become a source of truth.
 - Add the validated `location` parameter to catalog endpoints, with `current_stock` interpreted as stock at that location.
 - Add backoffice endpoints returning a per-location stocks map.
 - Define and document the rollback path before applying anything.
@@ -179,7 +179,9 @@ Create the real multi-location schema, backfill all existing data to `VF`, and m
 
 ### Phase 3 — Catalog and cart isolation (frontend)
 
-**Status: Pending.**
+**Status: In progress — the frontend catalog and cart isolation is implemented in code; the commit and the manual end-to-end verification against the real backend remain.**
+
+**Revision note (2026-11-03):** the catalog request now carries `?sede=VF|GO`, and the checkout payload carries `location_id`. The work items below describe the target and are implemented in the working tree; see `CHANGELOG-SEDES.md` for the shipped details. The phase is not committed, not pushed, and not verified end-to-end. Provider and admin product views still default to `VF` (Phase 5).
 
 #### Objective
 
@@ -193,10 +195,10 @@ Make the catalog consume the validated location contract and guarantee that the 
 #### Work items
 
 - Thread the validated location from `useSede` into catalog fetching and into the cart's identity.
-- Render only products whose association exists for the active sede. The real path must enforce this rule once the API exposes per-sede offerings.
+- Render only products whose association exists for the active sede. The real path now enforces this rule through the API's per-sede offerings.
 - Keep zero-stock products visible and make them unsellable at the UI boundary.
-- Re-key or clear the cart whenever the effective sede changes by any mechanism: an explicit switcher confirmation, a sede change made in another tab, or clearing storage. The current implementation only clears on a confirmed switcher change.
-- Known limitation: the sede is a per-browser preference and last-writer-wins across tabs; it is re-read only on load. Carts are per-tab and in-memory.
+- Re-key or clear the cart whenever the effective sede changes by any mechanism: an explicit switcher confirmation, a sede change made in another tab, or clearing storage. The cart now resets on any sede change, and `useSede` syncs across tabs through a `localStorage` `storage` listener.
+- Known limitation: the sede remains a per-browser preference but now syncs across tabs through a `storage` event; carts stay per-tab and in-memory.
 - Include exactly one location in the checkout payload sent by the client.
 - Keep the user-facing copy Spanish.
 
@@ -268,7 +270,7 @@ Give administrators per-sede management of offerings, stock, payroll, and report
 - Show the `GO` configuration as a visually distinct, disabled copy of the VF Google Sheets fields, with an empty `AppConfig` and no keys created. `useSettings` stays single-location.
 - Apply low-stock alert wording per sede.
 - Include the sede in exports (deferred; not part of this phase's frontend UI).
-- Keep `products.current_stock` as the VF mirror; do not reintroduce per-location data into it.
+- Keep `products.current_stock` as a write-only compatibility column, not a live mirror: nothing reads it and the trigger does not maintain it. Do not reintroduce per-location data into it.
 - Closing cleanup item: migrate every remaining `products.current_stock` consumer and remove the column in a versioned migration with a rollback path. The removal belongs to this phase, not to a separate one.
 
 #### Acceptance criteria
@@ -282,7 +284,7 @@ Give administrators per-sede management of offerings, stock, payroll, and report
 - The Sede column and filter are hidden when no sale carries `location_id`.
 - The settings tab shows the `GO` configuration as an inert, disabled empty block, and no `GO` configuration keys are created while the decision is deferred.
 - The per-sede offered/stock matrix renders as an inert placeholder until Phase 2/4 return `location_id`; real mode is otherwise visually unchanged.
-- No code reads `products.current_stock` as the source of truth while it is retained as the VF mirror; the column is removed in the cleanup item.
+- No code reads `products.current_stock` while it is retained as a write-only compatibility column; the column is removed in the cleanup item.
 - No deferred decision was implemented without an explicit resolution recorded in this document.
 
 #### Table-level Sede filters (pivot)
@@ -320,7 +322,7 @@ The following are non-negotiable for Phase 2:
 - **`locations` and `product_stock` are created and backfilled.** `VF` receives the current stock values; `GO` is created empty.
 - **`sales.location_id` is added nullable, backfilled to `VF`, then made `NOT NULL`.** Existing sales never lose their location.
 - **The trigger is rewritten** to resolve the location from the sale and update `product_stock`, not `products.current_stock`.
-- **A rollback path is required** and must be written down before apply. `products.current_stock` stays readable until every consumer has migrated, so rollback remains possible.
+- **A rollback path is required** and must be written down before apply. `products.current_stock` is no longer read by the backend; it remains until Phase 5 only as a compatibility column.
 - **Phase 2 acceptance includes:** the `VF` catalog is identical to today; the `GO` catalog is empty; zero-stock products are still visible; and sales still decrement `VF` correctly.
 
 If the extracted trigger's behavior cannot be fully explained, stop. Do not proceed to rewrite it from inference.
@@ -352,8 +354,8 @@ These are open. Do not implement them, and do not assume an answer to them.
 | Phase | Name | Status | Date |
 |---|---|---|---|
 | 1 | Context and detection (frontend) | Completed | 2026-10-31 |
-| 2 | Data architecture (database and API read contract) | Pending | — |
-| 3 | Catalog and cart isolation (frontend) | Pending | — |
+| 2 | Data architecture (database and API read contract) | In progress — backend API migration done in code; versioned migrations + committed trigger definition, RLS verification on `product_stock`, and frontend `?sede` integration (implemented in code, commit pending) remain | Started 2026-11-03 |
+| 3 | Catalog and cart isolation (frontend) | In progress — frontend isolation implemented in code; commit and manual end-to-end verification pending | Started 2026-11-03 |
 | 4 | Secure checkout (backend) | Pending | — |
 | 5 | Backoffice management | Pending (UI shell implemented) | UI shell 2026-11-01 |
 

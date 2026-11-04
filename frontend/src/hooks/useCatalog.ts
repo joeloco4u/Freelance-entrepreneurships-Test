@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { LocationCode } from "../config/locations";
 import { getCategories } from "../services/categoryService";
 import { getActiveProducts } from "../services/productService";
 import type { CatalogProduct, Category } from "../types";
@@ -7,12 +8,14 @@ import { ERROR_MESSAGES } from "../constants/errorMessages";
 
 export type SortOption = "name-asc" | "name-desc" | "price-asc" | "price-desc";
 const PAGE_SIZE = 12;
+const EMPTY_PRODUCTS: CatalogProduct[] = [];
 
-export function useCatalog() {
+export function useCatalog(sede: LocationCode | null) {
   const [remoteProducts, setRemoteProducts] = useState<CatalogProduct[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [settledSede, setSettledSede] = useState<LocationCode | null>(null);
 
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("name-asc");
@@ -20,60 +23,110 @@ export function useCatalog() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
-  const products: CatalogProduct[] = remoteProducts;
+  const requestIdRef = useRef(0);
+  const sedeRef = useRef<LocationCode | null>(sede);
 
   useEffect(() => {
-    let cancelled = false;
+    sedeRef.current = sede;
+  }, [sede]);
 
-    Promise.all([getActiveProducts(), getCategories()])
-      .then(([productsData, categoriesData]) => {
-        if (cancelled) return;
+  useEffect(() => {
+    const requestId = ++requestIdRef.current;
+
+    if (sede === null) {
+      // Sin sede no hay catálogo y no se dispara ninguna petición.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRemoteProducts([]);
+      setSettledSede(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    setLoading(true);
+    setError(null);
+    setRemoteProducts([]);
+    setPage(1);
+
+    const fetchProducts = async () => {
+      try {
+        const productsData = await getActiveProducts(sede, controller.signal);
+        if (requestId !== requestIdRef.current || controller.signal.aborted) {
+          return;
+        }
         setRemoteProducts(
           productsData.toSorted((a, b) => a.name.localeCompare(b.name)),
         );
-        setCategories(categoriesData);
+        setSettledSede(sede);
         setError(null);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(
-          getErrorMessage(err, ERROR_MESSAGES.products.load),
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      } catch (err: unknown) {
+        if (requestId !== requestIdRef.current || controller.signal.aborted) {
+          return;
+        }
+        // A failed load must not resurrect the previous sede's products:
+        // settledSede is set below, which turns off the isStale guard.
+        setRemoteProducts([]);
+        setSettledSede(sede);
+        setError(getErrorMessage(err, ERROR_MESSAGES.products.load));
+      } finally {
+        if (requestId === requestIdRef.current && !controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    const fetchCategories = async () => {
+      try {
+        const categoriesData = await getCategories();
+        if (requestId !== requestIdRef.current || controller.signal.aborted) {
+          return;
+        }
+        setCategories(categoriesData);
+      } catch {
+        // Las categorías son globales: conservamos las últimas cargadas.
+      }
+    };
+
+    fetchProducts();
+    fetchCategories();
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, []);
-
-  const refreshInFlight = useRef(false);
+  }, [sede]);
 
   const refreshProducts = async () => {
-    if (refreshInFlight.current) return;
-    refreshInFlight.current = true;
+    const targetSede = sedeRef.current;
+    if (targetSede === null) return;
+
+    const requestId = ++requestIdRef.current;
     setLoading(true);
+    setError(null);
     try {
-      const [productsData, categoriesData] = await Promise.all([
-        getActiveProducts(),
-        getCategories(),
-      ]);
+      const productsData = await getActiveProducts(targetSede);
+      if (requestId !== requestIdRef.current) return;
       setRemoteProducts(
         productsData.toSorted((a, b) => a.name.localeCompare(b.name)),
       );
-      setCategories(categoriesData);
+      setSettledSede(targetSede);
       setError(null);
     } catch (err: unknown) {
-      setError(
-        getErrorMessage(err, ERROR_MESSAGES.products.load),
-      );
+      if (requestId !== requestIdRef.current) return;
+      setSettledSede(targetSede);
+      setError(getErrorMessage(err, ERROR_MESSAGES.products.load));
     } finally {
-      refreshInFlight.current = false;
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   };
+
+  const isStale = sede !== null && sede !== settledSede;
+  const products: CatalogProduct[] =
+    sede === null || isStale ? EMPTY_PRODUCTS : remoteProducts;
+  const visibleLoading = sede === null ? false : isStale ? true : loading;
 
   const filteredAndSorted = useMemo(() => {
     const result = products.filter(
@@ -128,8 +181,8 @@ export function useCatalog() {
     paginatedProducts,
     filteredAndSorted,
     refreshProducts,
-    loading,
-    error,
+    loading: visibleLoading,
+    error: sede === null || isStale ? null : error,
     page: safePage,
     totalPages,
     setPage,
