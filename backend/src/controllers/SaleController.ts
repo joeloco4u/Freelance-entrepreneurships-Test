@@ -1,7 +1,13 @@
 import type { Request, Response } from "express";
 import { env } from "../config/env.js";
+import {
+  DEFAULT_LOCATION,
+  parseLocation,
+  type LocationCode,
+} from "../config/locations.js";
 import { supabaseAdmin } from "../db.js";
-import { respondWithError, toPublicError } from "../utils/errors.js";
+import { SaleRequestSchema } from "../schemas/schema.js";
+import { AppError, respondWithError, toPublicError } from "../utils/errors.js";
 import { logError } from "../utils/logger.js";
 import {
   consumerPurchaseTemplate,
@@ -82,6 +88,7 @@ export async function getAllSales(_req: Request, res: Response) {
         payment_type,
         payment_method,
         note,
+        location_id,
         users!consumer_id(id, name, email),
         sale_items(
             id,
@@ -142,6 +149,7 @@ export async function getSalesByEntrepreneurship(req: Request, res: Response) {
             payment_type,
             payment_method,
             note,
+            location_id,
             users!consumer_id(id, name, email),
             sale_items!inner(
                 id,
@@ -186,6 +194,7 @@ export async function getSalesByConsumer(req: Request, res: Response) {
             payment_type,
             payment_method,
             note,
+            location_id,
             users!consumer_id(name),
             sale_items(
                 id,
@@ -222,6 +231,7 @@ export async function getSaleById(req: Request, res: Response) {
       total,
       payroll_processed,
       refunded,
+      location_id,
       users!consumer_id(
         id, 
         name, 
@@ -257,11 +267,33 @@ export async function getSaleById(req: Request, res: Response) {
 
 // [PÚBLICO] Crear una venta — Flujo de Carrito
 export async function createSale(req: Request, res: Response) {
-  const { consumer_id, items, payment_type, payment_method, note } = req.body;
+  const rawLocation = req.body.location_id;
+  const hasLocation = rawLocation !== undefined && rawLocation !== null;
+  const parsedLocation = parseLocation(rawLocation);
 
-  if (!consumer_id || !items || !Array.isArray(items) || items.length === 0) {
+  if (hasLocation && parsedLocation === null) {
+    return res.status(400).json({ error: "Sede inválida" });
+  }
+
+  const location = parsedLocation ?? DEFAULT_LOCATION;
+  if (!hasLocation) {
+    console.warn(
+      "[createSale] location_id ausente; usando VF (fallback temporal hasta Phase 3)",
+    );
+  }
+
+  const parsed = SaleRequestSchema.safeParse({
+    ...req.body,
+    location_id: location,
+  });
+
+  if (!parsed.success) {
     return res.status(400).json({ error: "Datos de compra inválidos" });
   }
+
+  const { consumer_id, items, payment_type, payment_method, note } =
+    parsed.data;
+  const templatePaymentMethod = payment_method ?? undefined;
 
   const normalizedPaymentType: "credit" | "immediate" =
     payment_type === "immediate" ? "immediate" : "credit";
@@ -280,9 +312,17 @@ export async function createSale(req: Request, res: Response) {
     const processedItems: ProcessedItem[] = [];
 
     // 1. Validar todos los productos, traer info de los emprendedores y calcular total
-    const stockDeductions: StockDeduction[] = [];
+    const demandByProduct = new Map<string, number>();
 
+    const requestedByProduct = new Map<string, number>();
     for (const item of items) {
+      requestedByProduct.set(
+        item.product_id,
+        (requestedByProduct.get(item.product_id) ?? 0) + item.quantity,
+      );
+    }
+
+    for (const [productId, requestedQuantity] of requestedByProduct) {
       const { data: product, error: prodError } = await supabaseAdmin
         .from("products")
         .select(
@@ -290,7 +330,6 @@ export async function createSale(req: Request, res: Response) {
           id,
           name,
           price,
-          current_stock,
           is_active,
           is_composed,
           entrepreneurship:entrepreneurship_id (
@@ -301,15 +340,24 @@ export async function createSale(req: Request, res: Response) {
               email,
               name
             )
-          )
+          ),
+          product_stock(location_id, stock)
         `,
         )
-        .eq("id", item.product_id)
-        .single();
+        .eq("id", productId)
+        .eq("product_stock.location_id", location)
+        .maybeSingle();
 
       if (prodError || !product || !product.is_active) {
         return res.status(400).json({
-          error: `Producto ${item.product_id} no disponible`,
+          error: `Producto ${productId} no disponible`,
+        });
+      }
+
+      const offered = product.product_stock?.[0];
+      if (!offered) {
+        return res.status(400).json({
+          error: `El producto ${product.name} no está disponible en esta sede`,
         });
       }
 
@@ -317,75 +365,35 @@ export async function createSale(req: Request, res: Response) {
       const unitPrice = product.price;
 
       if (isComposed) {
-        // Es un producto compuesto: validar stock de los componentes
+        // Es un producto compuesto: acumular la demanda de sus componentes
         const { data: components } = await supabaseAdmin
           .from("composed_product_components")
           .select("component_product_id, quantity")
-          .eq("composed_product_id", item.product_id);
+          .eq("composed_product_id", productId);
 
         if (!components || components.length === 0) {
           return res.status(400).json({
-            error: `El producto compuesto ${item.product_id} no tiene componentes definidos`,
+            error: `El producto compuesto ${productId} no tiene componentes definidos`,
           });
         }
 
-        const componentIds = components.map((c) => c.component_product_id);
-        const { data: compProducts } = await supabaseAdmin
-          .from("products")
-          .select("id, current_stock")
-          .in("id", componentIds);
-
-        if (!compProducts || compProducts.length !== components.length) {
-          return res.status(400).json({
-            error: `No se encontraron todos los componentes del producto compuesto`,
-          });
-        }
-
-        const compStockMap = new Map(
-          compProducts.map((p) => [p.id, p.current_stock]),
-        );
-
         for (const comp of components) {
-          const available = compStockMap.get(comp.component_product_id) || 0;
-          const needed = comp.quantity * item.quantity;
-          if (available < needed) {
-            return res.status(400).json({
-              error: `Stock insuficiente para uno de los componentes del producto ${product.name}`,
-            });
-          }
-        }
+          if (!Number.isInteger(comp.quantity) || comp.quantity <= 0) continue;
 
-        // Acumular deducciones de stock para los componentes
-        for (const comp of components) {
-          const existingIdx = stockDeductions.findIndex(
-            (sd) => sd.product_id === comp.component_product_id,
+          demandByProduct.set(
+            comp.component_product_id,
+            (demandByProduct.get(comp.component_product_id) ?? 0) +
+              comp.quantity * requestedQuantity,
           );
-          const deductionQty = comp.quantity * item.quantity;
-          const existingDeduction = stockDeductions[existingIdx];
-          if (existingDeduction) {
-            existingDeduction.quantity += deductionQty;
-          } else {
-            stockDeductions.push({
-              product_id: comp.component_product_id,
-              quantity: deductionQty,
-            });
-          }
         }
       } else {
-        // Producto simple: validar stock
-        if (product.current_stock < item.quantity) {
-          return res.status(400).json({
-            error: `Producto ${item.product_id} no disponible o sin stock`,
-          });
-        }
-
-        stockDeductions.push({
-          product_id: item.product_id,
-          quantity: item.quantity,
-        });
+        demandByProduct.set(
+          productId,
+          (demandByProduct.get(productId) ?? 0) + requestedQuantity,
+        );
       }
 
-      const subtotal = unitPrice * item.quantity;
+      const subtotal = unitPrice * requestedQuantity;
       totalAmount += subtotal;
 
       const entData = product.entrepreneurship as unknown as {
@@ -394,8 +402,8 @@ export async function createSale(req: Request, res: Response) {
       const owner = entData.owner;
 
       processedItems.push({
-        product_id: item.product_id,
-        quantity: item.quantity,
+        product_id: productId,
+        quantity: requestedQuantity,
         unit_price: unitPrice,
         name: product.name,
         price: unitPrice,
@@ -406,7 +414,36 @@ export async function createSale(req: Request, res: Response) {
       });
     }
 
-    // 2. Crear la cabecera de la venta
+    // 2. Validar la demanda acumulada contra el stock real de la sede
+    const stockDeductions: StockDeduction[] = [...demandByProduct].map(
+      ([product_id, quantity]) => ({ product_id, quantity }),
+    );
+    const deductedProductIds = [...demandByProduct.keys()];
+
+    if (deductedProductIds.length > 0) {
+      const { data: stockRows, error: stockLookupError } = await supabaseAdmin
+        .from("product_stock")
+        .select("product_id, stock")
+        .eq("location_id", location)
+        .in("product_id", deductedProductIds);
+
+      if (stockLookupError) throw stockLookupError;
+
+      const stockMap = new Map(
+        (stockRows ?? []).map((row) => [row.product_id, row.stock]),
+      );
+
+      for (const deduction of stockDeductions) {
+        const available = stockMap.get(deduction.product_id) ?? 0;
+        if (deduction.quantity > available) {
+          return res.status(400).json({
+            error: "Stock insuficiente para uno de los productos del carrito",
+          });
+        }
+      }
+    }
+
+    // 3. Crear la cabecera de la venta
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
       .insert({
@@ -417,6 +454,7 @@ export async function createSale(req: Request, res: Response) {
         payment_method:
           normalizedPaymentType === "immediate" ? payment_method : null,
         note: note && typeof note === "string" && note.trim() ? note.trim() : null,
+        location_id: location,
       })
       .select(
         `
@@ -424,6 +462,7 @@ export async function createSale(req: Request, res: Response) {
         total,
         payment_type,
         payment_method,
+        location_id,
         consumer:consumer_id (
           id,
           email,
@@ -435,7 +474,7 @@ export async function createSale(req: Request, res: Response) {
 
     if (saleError || !sale || !sale.id) throw saleError;
 
-    // 3. Crear los detalles (sale_items)
+    // 4. Crear los detalles (sale_items)
     const itemsToInsert = processedItems.map((item) => ({
       sale_id: sale.id,
       product_id: item.product_id,
@@ -447,28 +486,12 @@ export async function createSale(req: Request, res: Response) {
       .from("sale_items")
       .insert(itemsToInsert);
 
-    if (itemsError) throw itemsError;
-
-    // 4. Stock deduction is handled by the reduce_stock_on_sale trigger on sale_items INSERT
-    // Verify stock integrity after insertion to detect TOCTOU overselling
-    try {
-      const verifyPromises = stockDeductions.map(async (sd) => {
-        const { data: prod } = await supabaseAdmin
-          .from("products")
-          .select("current_stock")
-          .eq("id", sd.product_id)
-          .single();
-
-        if (prod && prod.current_stock < 0) {
-          console.error(
-            `[TOCTOU] Stock negativo detectado para producto ${sd.product_id}: ${prod.current_stock}`,
-          );
-        }
-      });
-      await Promise.all(verifyPromises);
-    } catch (verifyErr) {
-      console.error("[SaleController] Error verificando stock post-inserción:", verifyErr);
+    if (itemsError) {
+      await supabaseAdmin.from("sales").delete().eq("id", sale.id);
+      throw itemsError;
     }
+
+    // 5. Stock deduction is handled by the reduce_stock_on_sale trigger on sale_items INSERT
 
     // --- PROCESO DE NOTIFICACIONES ---
     // Separamos en try-catch para que errores en notificaciones no fallen toda la venta
@@ -486,7 +509,7 @@ export async function createSale(req: Request, res: Response) {
           sale.total,
           processedItems,
           normalizedPaymentType,
-          payment_method,
+          templatePaymentMethod,
         );
 
         const consumerHtml = consumerPurchaseEmailHtml(
@@ -495,7 +518,7 @@ export async function createSale(req: Request, res: Response) {
           sale.total,
           processedItems,
           normalizedPaymentType,
-          payment_method,
+          templatePaymentMethod,
         );
 
         const notificationResult = await sendUserNotification(
@@ -554,7 +577,7 @@ export async function createSale(req: Request, res: Response) {
           data.products,
           consumerData?.name,
           normalizedPaymentType,
-          payment_method,
+          templatePaymentMethod,
         );
 
         const sellerHtml = entrepreneurSaleEmailHtml(
@@ -563,7 +586,7 @@ export async function createSale(req: Request, res: Response) {
           data.products,
           consumerData?.name,
           normalizedPaymentType,
-          payment_method,
+          templatePaymentMethod,
         );
 
         const notificationResult = await sendUserNotification(
@@ -596,21 +619,18 @@ export async function createSale(req: Request, res: Response) {
 
     try {
       const productIds = stockDeductions.map((d) => d.product_id);
-      const { data: products } = await supabaseAdmin
-        .from("products")
-        .select("id, current_stock")
-        .in("id", productIds);
+      const { data: stocks } = await supabaseAdmin
+        .from("product_stock")
+        .select("product_id, stock")
+        .eq("location_id", location)
+        .in("product_id", productIds);
 
-      if (products) {
-        const productsToCheck = products.map((p) => {
-          const deducted = stockDeductions.find(
-            (d) => d.product_id === p.id,
-          );
-          return {
-            product_id: p.id,
-            new_stock: p.current_stock - (deducted?.quantity || 0),
-          };
-        });
+      if (stocks) {
+        const productsToCheck = stocks.map((s) => ({
+          product_id: s.product_id,
+          new_stock: s.stock,
+          location_id: location,
+        }));
 
         await checkAndNotifyLowStock(productsToCheck);
       }
@@ -674,7 +694,7 @@ export async function createSale(req: Request, res: Response) {
           })),
           sellersForNotification,
           normalizedPaymentType,
-          payment_method,
+          templatePaymentMethod,
         );
 
         await sendSlackWebhookNotification(webhookUrl, webhookBlocks);
@@ -987,17 +1007,19 @@ export async function refundSale(req: Request, res: Response) {
         total,
         payroll_processed,
         refunded,
+        location_id,
         sale_items(
           id,
           product_id,
           quantity,
           unit_price,
           subtotal,
+          refunded,
           products!inner(
             id,
             name,
             entrepreneurship_id,
-            current_stock,
+            is_composed,
             entrepreneurships!inner(
               id,
               owner_id
@@ -1035,11 +1057,12 @@ export async function refundSale(req: Request, res: Response) {
     quantity: number;
     unit_price: number;
     subtotal: number;
+    refunded: boolean;
     products: {
       id: string;
       name: string;
       entrepreneurship_id: string;
-      current_stock: number;
+      is_composed: boolean;
       entrepreneurships:
         | { id: string; owner_id: string }
         | Array<{ id: string; owner_id: string }>;
@@ -1050,13 +1073,14 @@ export async function refundSale(req: Request, res: Response) {
     total: number;
     payroll_processed: boolean;
     refunded: boolean;
+    location_id: string | null;
     sale_items: typeof userItems;
   };
 
   if (isAdmin) {
-    // ADMIN: puede reembolsar cualquier item de la venta
+    // ADMIN: puede reembolsar cualquier item no reembolsado de la venta
     saleData = sale as unknown as typeof saleData;
-    userItems = saleData.sale_items;
+    userItems = saleData.sale_items.filter((item) => item.refunded !== true);
   } else {
     // PROVEEDOR: filtrar items que pertenecen a sus emprendimientos
     const { data: entrepreneurships } = await supabaseAdmin
@@ -1075,6 +1099,7 @@ export async function refundSale(req: Request, res: Response) {
     saleData = sale as unknown as typeof saleData;
 
     userItems = saleData.sale_items.filter((item) => {
+      if (item.refunded === true) return false;
       const entData = item.products.entrepreneurships;
       const entId = Array.isArray(entData) ? entData[0]?.id : entData?.id;
       return entId ? userEntIds.includes(entId) : false;
@@ -1109,83 +1134,16 @@ export async function refundSale(req: Request, res: Response) {
       .json({ error: "No hay items para reembolsar" });
   }
 
-  // 5. Restaurar stock de cada producto reembolsado — usar incremento atómico vía RPC
-  for (const item of refundItems) {
-    const { data: prodData } = await supabaseAdmin
-      .from("products")
-      .select("is_composed")
-      .eq("id", item.product_id)
-      .single();
+  // 5. Marcar como reembolsados SOLO los items que aún no lo estaban
+  const candidateIds = refundItems.map((item) => item.id);
 
-    if (prodData?.is_composed) {
-      const { data: components } = await supabaseAdmin
-        .from("composed_product_components")
-        .select("component_product_id, quantity")
-        .eq("composed_product_id", item.product_id);
-
-      if (components) {
-        for (const comp of components) {
-          const restoreQty = comp.quantity * item.quantity;
-          const { data: compProduct } = await supabaseAdmin
-            .from("products")
-            .select("current_stock")
-            .eq("id", comp.component_product_id)
-            .single();
-
-          if (compProduct) {
-            const restoredStock = compProduct.current_stock + restoreQty;
-            const { error: stockError } = await supabaseAdmin
-              .from("products")
-              .update({ current_stock: restoredStock })
-              .eq("id", comp.component_product_id);
-
-            if (stockError) {
-              console.error(
-                `Error restoring stock for component ${comp.component_product_id}:`,
-                stockError,
-              );
-            }
-          }
-        }
-      }
-    } else {
-      const { data: current } = await supabaseAdmin
-        .from("products")
-        .select("current_stock")
-        .eq("id", item.product_id)
-        .single();
-
-      if (current) {
-        const newStock = current.current_stock + item.quantity;
-
-        const { error: stockError } = await supabaseAdmin
-          .from("products")
-          .update({ current_stock: newStock })
-          .eq("id", item.product_id);
-
-        if (stockError) {
-          console.error(
-            `Error restoring stock for product ${item.product_id}:`,
-            stockError,
-          );
-        }
-      }
-    }
-  }
-
-  // 6. Calcular el total reembolsado
-  const refundTotal = refundItems.reduce(
-    (sum, item) => sum + (item.subtotal ?? item.quantity * item.unit_price),
-    0,
-  );
-
-  const refundItemIds = refundItems.map((item) => item.id);
-
-  // 7. Marcar sale_items como reembolsados (no se borran para mantener trazabilidad)
-  const { error: refundItemsError } = await supabaseAdmin
-    .from("sale_items")
-    .update({ refunded: true })
-    .in("id", refundItemIds);
+  const { data: transitionedRows, error: refundItemsError } =
+    await supabaseAdmin
+      .from("sale_items")
+      .update({ refunded: true })
+      .in("id", candidateIds)
+      .eq("refunded", false)
+      .select("id, product_id, quantity, unit_price, subtotal");
 
   if (refundItemsError) {
     return res
@@ -1193,10 +1151,55 @@ export async function refundSale(req: Request, res: Response) {
       .json({ error: "Error al marcar los items como reembolsados" });
   }
 
-  // 8. Determinar si es reembolso parcial o total
-  const remainingItemsCount = saleData.sale_items.length - refundItems.length;
+  if (!transitionedRows || transitionedRows.length === 0) {
+    return res.status(400).json({
+      error: "Los items seleccionados ya fueron reembolsados",
+    });
+  }
 
-  if (remainingItemsCount === 0) {
+  const transitionedIdSet = new Set<number>(
+    transitionedRows.map((row) => row.id as number),
+  );
+  const appliedItems = refundItems.filter((item) =>
+    transitionedIdSet.has(item.id),
+  );
+
+  // 6. Restaurar stock únicamente de los items que esta llamada marcó
+  const refundLocation =
+    parseLocation(saleData.location_id) ?? DEFAULT_LOCATION;
+
+  try {
+    for (const item of appliedItems) {
+      await restoreSaleItemStock(
+        {
+          product_id: item.product_id,
+          quantity: item.quantity,
+          is_composed: item.products.is_composed === true,
+        },
+        refundLocation,
+      );
+    }
+  } catch (restoreError: unknown) {
+    return respondWithError(res, restoreError, "refundSale", {
+      status: 500,
+      fallback:
+        "No se pudo restaurar el stock de los items reembolsados. Revisa el inventario.",
+    });
+  }
+
+  // 7. Calcular el total reembolsado
+  const refundTotal = appliedItems.reduce(
+    (sum, item) => sum + (item.subtotal ?? item.quantity * item.unit_price),
+    0,
+  );
+
+  // 8. Determinar si es reembolso parcial o total
+  const remainingItems = saleData.sale_items.filter(
+    (item) => item.refunded !== true && !transitionedIdSet.has(item.id),
+  );
+  const isFullRefund = remainingItems.length === 0;
+
+  if (isFullRefund) {
     // --- REEMBOLSO TOTAL ---
     const { error: refundError } = await supabaseAdmin
       .from("sales")
@@ -1210,7 +1213,7 @@ export async function refundSale(req: Request, res: Response) {
     }
 
     try {
-      await sendRefundNotification(sale.id, refundItems, refundTotal, "full");
+      await sendRefundNotification(sale.id, appliedItems, refundTotal, "full");
     } catch (notifyErr) {
       console.error("Error sending refund notification:", notifyErr);
     }
@@ -1238,7 +1241,7 @@ export async function refundSale(req: Request, res: Response) {
     try {
       await sendRefundNotification(
         sale.id,
-        refundItems,
+        appliedItems,
         refundTotal,
         "partial",
       );
@@ -1443,6 +1446,7 @@ async function processSingleRefund(saleId: string, userEntIds: string[], isAdmin
         total,
         payroll_processed,
         refunded,
+        location_id,
         users!consumer_id(id, name, email),
         sale_items(
           id,
@@ -1455,7 +1459,7 @@ async function processSingleRefund(saleId: string, userEntIds: string[], isAdmin
             id,
             name,
             entrepreneurship_id,
-            current_stock,
+            is_composed,
             entrepreneurships!inner(
               id,
               owner_id
@@ -1476,7 +1480,7 @@ async function processSingleRefund(saleId: string, userEntIds: string[], isAdmin
   }
 
   if (sale.refunded) {
-    throw new Error("La venta ya fue reembolsada");
+    throw new AppError("La venta ya fue reembolsada", 400);
   }
 
   const saleData = sale as unknown as {
@@ -1484,6 +1488,7 @@ async function processSingleRefund(saleId: string, userEntIds: string[], isAdmin
     total: number;
     payroll_processed: boolean;
     refunded: boolean;
+    location_id: string | null;
     users:
       | { id: string; name: string; email: string }
       | Array<{ id: string; name: string; email: string }>;
@@ -1498,7 +1503,7 @@ async function processSingleRefund(saleId: string, userEntIds: string[], isAdmin
         id: string;
         name: string;
         entrepreneurship_id: string;
-        current_stock: number;
+        is_composed: boolean;
         entrepreneurships:
           | { id: string; owner_id: string }
           | Array<{ id: string; owner_id: string }>;
@@ -1519,39 +1524,64 @@ async function processSingleRefund(saleId: string, userEntIds: string[], isAdmin
   });
 
   if (userItems.length === 0) {
-    throw new Error(isAdmin ? "No hay items para reembolsar en esta venta" : "No hay items de tus emprendimientos para reembolsar en esta venta");
+    throw new AppError(
+      isAdmin
+        ? "No hay items para reembolsar en esta venta"
+        : "No hay items de tus emprendimientos para reembolsar en esta venta",
+      400,
+    );
   }
 
-  for (const item of userItems) {
-    const newStock = item.products.current_stock + item.quantity;
-    const { error: stockError } = await supabaseAdmin
-      .from("products")
-      .update({ current_stock: newStock })
-      .eq("id", item.product_id);
+  // Marcar como reembolsados SOLO los items que aún no lo estaban
+  const candidateIds = userItems.map((item) => item.id);
 
-    if (stockError) {
-      console.error(`Error restoring stock for product ${item.product_id}:`, stockError);
-    }
-  }
-
-  const refundTotal = userItems.reduce(
-    (sum, item) => sum + (item.subtotal ?? item.quantity * item.unit_price),
-    0,
-  );
-
-  const refundItemIds = userItems.map((item) => item.id);
-
-  const { error: refundItemsError } = await supabaseAdmin
-    .from("sale_items")
-    .update({ refunded: true })
-    .in("id", refundItemIds);
+  const { data: transitionedRows, error: refundItemsError } =
+    await supabaseAdmin
+      .from("sale_items")
+      .update({ refunded: true })
+      .in("id", candidateIds)
+      .eq("refunded", false)
+      .select("id, product_id, quantity, unit_price, subtotal");
 
   if (refundItemsError) {
     throw new Error("Error al marcar los items como reembolsados");
   }
 
-  const nonRefundedItems = saleData.sale_items.filter((item) => !item.refunded && !refundItemIds.includes(item.id));
-  const isFullRefund = nonRefundedItems.length === 0;
+  if (!transitionedRows || transitionedRows.length === 0) {
+    throw new AppError("Los items seleccionados ya fueron reembolsados", 400);
+  }
+
+  const transitionedIdSet = new Set<number>(
+    transitionedRows.map((row) => row.id as number),
+  );
+  const appliedItems = userItems.filter((item) =>
+    transitionedIdSet.has(item.id),
+  );
+
+  // Restaurar stock únicamente de los items que esta llamada marcó
+  const refundLocation =
+    parseLocation(saleData.location_id) ?? DEFAULT_LOCATION;
+
+  for (const item of appliedItems) {
+    await restoreSaleItemStock(
+      {
+        product_id: item.product_id,
+        quantity: item.quantity,
+        is_composed: item.products.is_composed === true,
+      },
+      refundLocation,
+    );
+  }
+
+  const refundTotal = appliedItems.reduce(
+    (sum, item) => sum + (item.subtotal ?? item.quantity * item.unit_price),
+    0,
+  );
+
+  const remainingItems = saleData.sale_items.filter(
+    (item) => !item.refunded && !transitionedIdSet.has(item.id),
+  );
+  const isFullRefund = remainingItems.length === 0;
   const refundType: "full" | "partial" = isFullRefund ? "full" : "partial";
 
   if (isFullRefund) {
@@ -1576,7 +1606,7 @@ async function processSingleRefund(saleId: string, userEntIds: string[], isAdmin
     }
   }
 
-  const notificationItems = userItems.map((item) => ({
+  const notificationItems = appliedItems.map((item) => ({
     quantity: item.quantity,
     unit_price: item.unit_price,
     products: { name: item.products.name },
@@ -1683,4 +1713,86 @@ async function processSinglePayroll(saleId: string) {
       }
     }
   }
+}
+
+interface RestorableSaleItem {
+  product_id: string;
+  quantity: number;
+  is_composed?: boolean;
+}
+
+async function restoreSaleItemStock(
+  item: RestorableSaleItem,
+  location: LocationCode,
+): Promise<void> {
+  if (!Number.isInteger(item.quantity) || item.quantity <= 0) return;
+
+  let isComposed = item.is_composed;
+  if (isComposed === undefined) {
+    const { data: product, error } = await supabaseAdmin
+      .from("products")
+      .select("is_composed")
+      .eq("id", item.product_id)
+      .single();
+
+    if (error || !product) {
+      throw new Error(`No se encontró el producto ${item.product_id}`);
+    }
+
+    isComposed = product.is_composed === true;
+  }
+
+  if (!isComposed) {
+    await restoreProductStock(item.product_id, location, item.quantity);
+    return;
+  }
+
+  const { data: components, error: componentsError } = await supabaseAdmin
+    .from("composed_product_components")
+    .select("component_product_id, quantity")
+    .eq("composed_product_id", item.product_id);
+
+  if (componentsError) throw componentsError;
+
+  for (const component of components ?? []) {
+    if (!Number.isInteger(component.quantity) || component.quantity <= 0) {
+      continue;
+    }
+
+    await restoreProductStock(
+      component.component_product_id,
+      location,
+      component.quantity * item.quantity,
+    );
+  }
+}
+
+async function restoreProductStock(
+  productId: string,
+  location: LocationCode,
+  quantity: number,
+): Promise<void> {
+  const { data: current, error: readError } = await supabaseAdmin
+    .from("product_stock")
+    .select("stock")
+    .eq("product_id", productId)
+    .eq("location_id", location)
+    .maybeSingle();
+
+  if (readError) throw readError;
+
+  if (!current) {
+    console.warn(
+      `[restoreProductStock] Sin fila de stock para ${productId} en ${location}; se omite.`,
+    );
+    return;
+  }
+
+  const { error } = await supabaseAdmin
+    .from("product_stock")
+    .update({ stock: current.stock + quantity })
+    .eq("product_id", productId)
+    .eq("location_id", location);
+
+  if (error) throw error;
 }

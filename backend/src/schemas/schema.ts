@@ -1,4 +1,5 @@
 import z from "zod";
+import { LOCATION_CODES, type LocationCode } from "../config/locations.js";
 
 export type UserRole = "IT" | "ADMIN" | "PROVEEDOR" | "CONSUMIDOR";
 export type RequestStatus = "PENDIENTE" | "APROBADO" | "RECHAZADO";
@@ -51,6 +52,7 @@ export interface Sale {
 	payroll_processed: boolean;
 	payment_type: PaymentType;
 	payment_method?: PaymentMethod | null;
+	location_id: LocationCode;
 }
 
 export interface Entrepreneurship {
@@ -85,6 +87,25 @@ export const PurchaseSchema = z.object({
 		.number()
 		.int()
 		.positive("La cantidad debe ser un entero positivo"),
+	location_id: z.enum(LOCATION_CODES),
+});
+
+// --- Esquema para crear una venta desde el carrito ---
+export const SaleRequestSchema = z.object({
+	consumer_id: z.uuid(),
+	items: z
+		.array(
+			z.object({
+				product_id: z.uuid(),
+				quantity: z.number().int().positive(),
+			}),
+		)
+		.min(1)
+		.max(100),
+	location_id: z.enum(LOCATION_CODES),
+	payment_type: z.enum(["credit", "immediate"]).optional(),
+	payment_method: z.enum(["efectivo", "binance", "pago_movil"]).nullish(),
+	note: z.string().trim().max(500).optional(),
 });
 
 // --- Esquema para Solicitud de Registro (Proveedores) ---
@@ -98,6 +119,7 @@ export const RegistrationRequestSchema = z.object({
 
 // --- Extraer los Tipos de TypeScript de los esquemas ---
 export type PurchaseInput = z.infer<typeof PurchaseSchema>;
+export type SaleRequestInput = z.infer<typeof SaleRequestSchema>;
 export type RegistrationRequestInput = z.infer<
 	typeof RegistrationRequestSchema
 >;

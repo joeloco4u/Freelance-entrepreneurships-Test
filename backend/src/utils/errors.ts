@@ -54,6 +54,11 @@ export const PG_MESSAGES: Record<string, PgMapping> = {
 		status: 400,
 		message: "Alguno de los datos enviados tiene un formato inválido.",
 	},
+	// check_violation
+	"23514": {
+		status: 409,
+		message: "Stock insuficiente para completar la venta.",
+	},
 	// PostgREST: no rows returned by .single()
 	PGRST116: {
 		status: 404,

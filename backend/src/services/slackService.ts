@@ -179,7 +179,6 @@ export const sendSlackNotification = async (
 export interface LowStockProduct {
   id: string;
   name: string;
-  current_stock: number;
   entrepreneurship_name: string;
   owner_id: string;
   owner_email: string;
@@ -187,7 +186,11 @@ export interface LowStockProduct {
 }
 
 export const checkAndNotifyLowStock = async (
-  products: Array<{ product_id: string; new_stock: number }>,
+  products: Array<{
+    product_id: string;
+    new_stock: number;
+    location_id?: string;
+  }>,
 ): Promise<void> => {
   for (const item of products) {
     if (item.new_stock >= LOW_STOCK_THRESHOLD) continue;
@@ -198,7 +201,6 @@ export const checkAndNotifyLowStock = async (
         `
         id,
         name,
-        current_stock,
         entrepreneurship:entrepreneurship_id(
           name,
           owner:owner_id(id, email, name)
@@ -220,7 +222,7 @@ export const checkAndNotifyLowStock = async (
       owner.name,
       product.name,
       entData.name,
-      product.current_stock,
+      item.new_stock,
     );
 
     try {

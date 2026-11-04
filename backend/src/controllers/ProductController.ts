@@ -1,4 +1,10 @@
 import type { Request, Response } from "express";
+import {
+  DEFAULT_LOCATION,
+  isLocationCode,
+  parseLocation,
+  type LocationCode,
+} from "../config/locations.js";
 import { supabaseAdmin } from "../db.js";
 import { respondWithError } from "../utils/errors.js";
 import { uploadProductImage } from "../services/uploadImageService.js";
@@ -17,44 +23,97 @@ const DELETE_OPTIONS = {
   fallback: "No se pudo eliminar el producto. Intenta de nuevo más tarde.",
 };
 
+type LocationStock = { offered: boolean; stock: number };
+type ProductStockRow = { location_id: string; stock: number };
+
+function resolveSede(req: Request, res: Response): LocationCode | null {
+  const raw = req.query.sede;
+  if (raw === undefined) return DEFAULT_LOCATION;
+
+  const parsed = parseLocation(raw);
+  if (!parsed) {
+    res.status(400).json({ error: "Sede inválida" });
+    return null;
+  }
+  return parsed;
+}
+
+function buildStocks(
+  rows: ProductStockRow[] | undefined,
+): Record<LocationCode, LocationStock> {
+  const stocks: Record<LocationCode, LocationStock> = {
+    VF: { offered: false, stock: 0 },
+    GO: { offered: false, stock: 0 },
+  };
+
+  for (const row of rows ?? []) {
+    if (isLocationCode(row.location_id)) {
+      stocks[row.location_id] = { offered: true, stock: row.stock };
+    }
+  }
+
+  return stocks;
+}
+
+function stockAtLocation(
+  rows: ProductStockRow[] | undefined,
+  location: LocationCode,
+): number {
+  return rows?.find((row) => row.location_id === location)?.stock ?? 0;
+}
+
 // [PÚBLICO] Obtener todos los productos activos de emprendimientos activos
-export async function getActiveProducts(_req: Request, res: Response) {
+export async function getActiveProducts(req: Request, res: Response) {
+  const location = resolveSede(req, res);
+  if (!location) return;
+
   const { data, error } = await supabaseAdmin
     .from("products")
-    .select("*, entrepreneurships(id, name)")
+    .select(
+      "*, entrepreneurships!inner(id, name), product_stock!inner(location_id, stock)",
+    )
     .eq("is_active", true)
-    .eq("entrepreneurships.is_active", true);
+    .eq("entrepreneurships.is_active", true)
+    .eq("product_stock.location_id", location);
 
   if (error)
     return respondWithError(res, error, "getActiveProducts", {
       fallback: PRODUCTS_LOAD_ERROR,
     });
 
-  const enriched = await enrichComposedStock(data);
-  const       result = enriched.map((p) => ({
-    ...p,
-    current_stock: p.computed_stock ?? p.current_stock,
-  }));
+  const enriched = await enrichComposedStock(data ?? [], location);
+  const result = enriched.map((p) => {
+    const { product_stock: _productStock, ...product } = p;
+    return { ...product, current_stock: p.computed_stock ?? 0 };
+  });
 
   res.status(200).json(result);
 }
 
 // [ADMIN/IT] Obtener todos los productos
-export async function getAllProducts(_req: Request, res: Response) {
+export async function getAllProducts(req: Request, res: Response) {
+  const location = resolveSede(req, res);
+  if (!location) return;
+
   const { data, error } = await supabaseAdmin
     .from("products")
-    .select("*, entrepreneurships(id, name)");
+    .select("*, entrepreneurships(id, name), product_stock(location_id, stock)");
 
   if (error)
     return respondWithError(res, error, "getAllProducts", {
       fallback: PRODUCTS_LOAD_ERROR,
     });
 
-  const enriched = await enrichComposedStock(data);
-  const result = enriched.map((p) => ({
-    ...p,
-    current_stock: p.computed_stock ?? p.current_stock,
-  }));
+  const enriched = await enrichComposedStock(data ?? [], location);
+  const result = enriched.map((p) => {
+    const rows = p.product_stock;
+    const { product_stock: _productStock, ...product } = p;
+    return {
+      ...product,
+      current_stock: p.computed_stock ?? stockAtLocation(rows, location),
+      stocks: buildStocks(rows),
+    };
+  });
 
   res.status(200).json(result);
 }
@@ -66,6 +125,9 @@ export async function getProductsByEntrepreneurship(
 ) {
   const { entrepreneurship_id } = req.params;
   const requestingUser = req.user;
+
+  const location = resolveSede(req, res);
+  if (!location) return;
 
   if (requestingUser?.user_metadata.roles.includes("PROVEEDOR")) {
     const { data: entrepreneurship } = await supabaseAdmin
@@ -88,7 +150,7 @@ export async function getProductsByEntrepreneurship(
 
   const { data, error } = await supabaseAdmin
     .from("products")
-    .select("*")
+    .select("*, product_stock(location_id, stock)")
     .eq("entrepreneurship_id", entrepreneurship_id);
 
   if (error)
@@ -96,11 +158,16 @@ export async function getProductsByEntrepreneurship(
       fallback: PRODUCTS_LOAD_ERROR,
     });
 
-  const enriched = await enrichComposedStock(data);
-  const result = enriched.map((p) => ({
-    ...p,
-    current_stock: p.computed_stock ?? p.current_stock,
-  }));
+  const enriched = await enrichComposedStock(data ?? [], location);
+  const result = enriched.map((p) => {
+    const rows = p.product_stock;
+    const { product_stock: _productStock, ...product } = p;
+    return {
+      ...product,
+      current_stock:
+        p.computed_stock ?? stockAtLocation(rows, location) ?? 0,
+    };
+  });
 
   res.status(200).json(result);
 }
@@ -109,22 +176,31 @@ export async function getProductsByEntrepreneurship(
 export async function getProductById(req: Request, res: Response) {
   const { id } = req.params;
 
+  const location = resolveSede(req, res);
+  if (!location) return;
+
   const { data, error } = await supabaseAdmin
     .from("products")
-    .select("*, entrepreneurships(id, name)")
+    .select(
+      "*, entrepreneurships(id, name), product_stock(location_id, stock)",
+    )
     .eq("id", id)
     .single();
 
   if (error) return res.status(404).json({ error: "Producto no encontrado" });
 
-  const enriched = await enrichComposedStock([data]);
+  const enriched = await enrichComposedStock([data], location);
   const enrichedProduct = enriched[0];
   if (!enrichedProduct) {
     return res.status(500).json({ error: "Error al procesar el producto" });
   }
+
+  const rows = enrichedProduct.product_stock;
+  const { product_stock: _productStock, ...product } = enrichedProduct;
   const result = {
-    ...enrichedProduct,
-    current_stock: enrichedProduct.computed_stock ?? enrichedProduct.current_stock,
+    ...product,
+    current_stock:
+      enrichedProduct.computed_stock ?? stockAtLocation(rows, location) ?? 0,
   };
 
   res.status(200).json(result);
@@ -145,7 +221,9 @@ export async function createProduct(req: Request, res: Response) {
     !entrepreneurship_id ||
     !name ||
     Number.isNaN(price) ||
-    Number.isNaN(current_stock)
+    price < 0 ||
+    Number.isNaN(current_stock) ||
+    current_stock < 0
   ) {
     return res.status(400).json({
       error:
@@ -198,8 +276,23 @@ export async function createProduct(req: Request, res: Response) {
       .single();
 
     if (insertError) throw insertError;
+    if (!newProduct) throw new Error("No se pudo crear el producto");
 
-    // 6. Respuesta exitosa
+    // 6. Asociar el producto a la sede por defecto (puente temporal)
+    const { error: stockError } = await supabaseAdmin
+      .from("product_stock")
+      .insert({
+        product_id: newProduct.id,
+        location_id: DEFAULT_LOCATION,
+        stock: current_stock,
+      });
+
+    if (stockError) {
+      await supabaseAdmin.from("products").delete().eq("id", newProduct.id);
+      throw stockError;
+    }
+
+    // 7. Respuesta exitosa
     return res.status(201).json(newProduct);
   } catch (error: unknown) {
     return respondWithError(res, error, "createProduct", {
@@ -253,8 +346,14 @@ export async function updateProduct(req: Request, res: Response) {
     }
 
     if (updates.price !== undefined) updates.price = parseFloat(updates.price as string);
-    if (updates.current_stock !== undefined)
+    if (updates.current_stock !== undefined) {
       updates.current_stock = parseInt(updates.current_stock as string, 10);
+      if (!Number.isInteger(updates.current_stock) || (updates.current_stock as number) < 0) {
+        return res.status(400).json({
+          error: "El stock debe ser un entero mayor o igual a 0",
+        });
+      }
+    }
     if (updates.is_active !== undefined) {
       updates.is_active =
         updates.is_active === "true" || updates.is_active === true;
@@ -281,21 +380,25 @@ export async function updateProduct(req: Request, res: Response) {
     if (updateError) throw updateError;
 
     if (updates.current_stock !== undefined) {
+      const newStock = updates.current_stock as number;
+
+      const { error: stockError } = await supabaseAdmin
+        .from("product_stock")
+        .upsert(
+          {
+            product_id: id,
+            location_id: DEFAULT_LOCATION,
+            stock: newStock,
+          },
+          { onConflict: "product_id,location_id" },
+        );
+
+      if (stockError) throw stockError;
+
       try {
-        const stockValue = updates.current_stock;
-        let newStock: number;
-        if (typeof stockValue === "number") {
-          newStock = stockValue;
-        } else if (typeof stockValue === "string") {
-          newStock = parseInt(stockValue, 10);
-        } else {
-          newStock = 0;
-        }
-        if (!Number.isNaN(newStock)) {
-          await checkAndNotifyLowStock([
-            { product_id: id, new_stock: newStock },
-          ]);
-        }
+        await checkAndNotifyLowStock([
+          { product_id: id, new_stock: newStock, location_id: DEFAULT_LOCATION },
+        ]);
       } catch (stockErr) {
         console.error("Error checking low stock:", stockErr);
       }
