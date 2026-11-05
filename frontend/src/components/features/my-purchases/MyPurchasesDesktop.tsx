@@ -104,6 +104,16 @@ export default function MyPurchasesDesktop({
                           />
                         ))}
                       </div>
+                      {sale.note && (
+                        <div className="pt-3 border-t border-gray-100">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                            Nota
+                          </p>
+                          <p className="text-sm text-gray-600 italic whitespace-pre-wrap break-words">
+                            "{sale.note}"
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </td>
                 </tr>

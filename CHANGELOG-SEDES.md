@@ -13,6 +13,27 @@
 
 ## [Unreleased]
 
+### Catalog hero — decorative active-sede badge
+
+- **Date:** `2026-11-04`
+- **Type:** `feat` (frontend, visual only)
+- **Scope:** public catalog banner (`CatalogHero`). No backend, API, schema, or environment changes.
+- **Files added:** none.
+- **Files modified:**
+  - `frontend/src/components/features/catalog/CatalogHero.tsx`
+- **Description:** the office manager asked for a quick visual cue on the catalog banner showing the active sede. A decorative circular badge was added as the last child of the existing `relative` banner container, positioned `absolute top-4 right-4`, rendering the active `LocationCode` (`VF` / `GO`) from the existing `sede` prop. The final styling is a **3D frosted-glass bubble** (an earlier solid brand-blue draft and a later thin-glass `bg-white/20` draft were both replaced). Final classes on line 45: `pointer-events-none select-none absolute top-4 right-4 w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center bg-white/50 backdrop-blur-xl text-slate-900 font-extrabold text-4xl md:text-5xl shadow-2xl border border-white/60 ring-1 ring-inset ring-white/30 [text-shadow:0_1px_0_rgba(255,255,255,0.65)]`. Behavior and design notes:
+   - The bubble uses a more opaque frosted white (`bg-white/50`) with a stronger blur (`backdrop-blur-xl`), so the banner photo reads as diffused frost behind the lettering instead of showing through. The reflective outer edge is `border border-white/60`, the inner highlight is `ring-1 ring-inset ring-white/30`, and `shadow-2xl` provides the 3D bubble lift off the image. `bg-white/20`, `backdrop-blur-lg`, `border-white/40`, `border-4 border-white`, and the solid `bg-primary` token are all no longer used.
+   - Ink is `text-slate-900`, **not** `text-white`: white text over the more opaque white glass fails the WCAG 3:1 large-text threshold on both banner overlays, while slate-900 on `bg-white/50` measures ~6.6:1 over the Valle Frío overlay and ~5.0:1 over the Grano de Oro overlay. The arbitrary utility `[text-shadow:0_1px_0_rgba(255,255,255,0.65)]` adds a top-edge highlight for depth without reducing contrast.
+   - Sizing, weight, and content are unchanged: `w-20 h-20 text-4xl` on phones scaling to `md:w-24 md:h-24 md:text-5xl` on desktop, `font-extrabold`, rendering `{sede}`.
+   - The banner container (line 16) is `relative h-96 md:h-80 overflow-hidden`, so the mobile hero is 384px tall while the desktop hero stays 320px. The badge size is unchanged, so these heights are unchanged.
+   - The hero text wrapper (line 27) is `absolute inset-0 flex flex-col items-center justify-center text-center px-8 pt-24 md:pt-0`; the `pt-24` reserves the badge zone on mobile so the badge does not cover the centered eyebrow text ("Emprendimientos internos"), while `md:pt-0` keeps desktop centering unchanged. Both values are unchanged by this restyle.
+   - The badge is `aria-hidden="true"`, `pointer-events-none select-none`, and renders the `{sede}` prop, so it adds no screen-reader output and does not intercept clicks; the hero subtitle and banner alt text remain the accessible source of the sede context. These attributes are unchanged.
+   - No `z-index` was added: DOM order paints the badge above the banner image, overlay, and text, while the sticky header stays above it. Adding a stacking context here could have caused the badge to paint over the header. This is unchanged.
+   - No `useSede` was introduced; the `sede` prop passed by `CatalogPage.tsx` remains the single source of truth, so the badge cannot drift from the catalog/cart sede.
+   - This restyle is visual only: no layout, copy, data, or behavior of the catalog, cart, or checkout changed.
+- **Status:** working-tree changes; not committed and not pushed.
+- **Verification:** code review approved; security audit passed (decorative, non-interactive, no data exposure); ESLint clean on the changed file. No build was run per project build policy.
+
 ### Phase 3 — catalog and cart isolation by sede
 
 - **Date:** `2026-11-03`

@@ -1,5 +1,5 @@
 import { Modal } from "antd";
-import { Store } from "lucide-react";
+import { Lightbulb, Store } from "lucide-react";
 import {
   LOCATION_CODES,
   LOCATIONS,
@@ -27,11 +27,30 @@ export default function LocationPromptModal({ open, onSelect }: Props) {
       title="¿En qué sede te encuentras hoy?"
       styles={{ container: { borderRadius: 24, padding: 32 } }}
     >
-      <p className="text-sm text-gray-500 mb-6">
-        Selecciona la sede desde la que estás comprando. Esta elección se
-        guardará en este equipo, pero podrás cambiar de sede cuando quieras
-        desde el menú.
+      <p className="text-sm text-gray-500 mb-4">
+        Selecciona la sede desde la que estás comprando.
       </p>
+
+      <div
+        role="note"
+        className="mb-6 flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4"
+      >
+        <span
+          aria-hidden="true"
+          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
+        >
+          <Lightbulb size={18} />
+        </span>
+        <div className="min-w-0 text-left">
+          <p className="text-sm font-semibold text-gray-900">
+            Puedes cambiarla cuando quieras
+          </p>
+          <p className="mt-0.5 text-sm leading-relaxed text-gray-600">
+            Se guardará en este equipo, pero podrás cambiar de sede desde el
+            selector de la cabecera.
+          </p>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {LOCATION_CODES.map((code, index) => (
