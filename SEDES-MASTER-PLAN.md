@@ -43,7 +43,7 @@ Rule 4 was revised on 2026-11-02 by explicit product decision: the catalog sede 
 This is the factual baseline the plan is built on. It is descriptive, not aspirational.
 
 - `products.current_stock` is a single scalar column. Composed-product availability is derived at read time from component stock in `enrichComposedStock` (`backend/src/controllers/ComposedProductController.ts`), which takes the minimum of `component_stock / quantity` across components.
-- Stock deduction is delegated to a database trigger named `reduce_stock_on_sale`, referenced only from a comment in `backend/src/controllers/SaleController.ts`. The trigger body is **not versioned in the repository**.
+- Stock deduction is delegated to a database trigger named `reduce_stock_on_sale`. The live definition was extracted and versioned at `backend/supabase/migrations/20261105_reduce_stock_on_sale.sql` on 2026-11-05 (working tree; not yet committed or applied).
 - Sales are created through multiple non-atomic steps: product validation, sale header insert, sale items insert, then a post-hoc read that logs negative stock (a TOCTOU check that only writes to the server log). There is no transaction and no database-enforced non-negative guarantee.
 - `POST /api/sales` is public and unauthenticated. The client supplies `consumer_id` in the request body. Only the read and mutation endpoints behind it require authentication.
 - Admin metrics and summaries are aggregated client-side in `frontend/src/hooks/useAdminData.ts`.
@@ -142,7 +142,7 @@ To demo the first-visit flow, clear `hq_location` in DevTools (Application -> Lo
 
 ### Phase 2 — Data architecture (database and API read contract)
 
-**Status: In progress — the backend API migration is implemented in code; versioned migrations and the committed trigger definition, RLS verification on `product_stock`, and the frontend `?sede` integration (implemented in code, commit pending) remain. This is the highest-risk phase; see the dedicated section below.** Mock mode was removed on 2026-11-02 at the start of this phase, so all work now runs against real Supabase and backend services.
+**Status: In progress — the backend API migration is implemented in code, the live `reduce_stock_on_sale` trigger is now versioned at `backend/supabase/migrations/20261105_reduce_stock_on_sale.sql`, and the temporary `VF` fallback was removed from `POST /api/sales` on 2026-11-05 (missing or invalid `location_id` now returns `400`). RLS verification on `product_stock`, the versioned `locations`/`product_stock` table migrations, the atomic refund increment, and integration tests for the trigger/RPC path remain. The frontend `?sede` integration is committed (Phase 3). This is the highest-risk phase; see the dedicated section below.** Mock mode was removed on 2026-11-02 at the start of this phase, so all work now runs against real Supabase and backend services.
 
 #### Objective
 
@@ -155,12 +155,12 @@ Create the real multi-location schema, backfill all existing data to `VF`, and m
 
 #### Work items
 
-- Extract the current `reduce_stock_on_sale` definition from the live database and review it, including its behavior for composed products.
+- Extract the current `reduce_stock_on_sale` definition from the live database and review it, including its behavior for composed products. **Completed 2026-11-05 — versioned at `backend/supabase/migrations/20261105_reduce_stock_on_sale.sql` (working tree; not yet committed or applied).**
 - Commit a versioned migration for `locations` and seed `VF` and `GO`.
 - Commit a versioned migration for `product_stock` with the non-negative constraint and the composite key.
 - Backfill `product_stock` from `products.current_stock` for `VF`; `GO` is created empty.
 - Add `sales.location_id` as nullable, backfill every existing row to `VF`, then set it `NOT NULL`.
-- Rewrite the trigger to resolve the location from the sale and update `product_stock` instead of `products.current_stock`.
+- Rewrite the trigger to resolve the location from the sale and update `product_stock` instead of `products.current_stock`. **Completed 2026-11-05 — versioned at `backend/supabase/migrations/20261105_reduce_stock_on_sale.sql` (working tree; not yet committed or applied).**
 - Keep `products.current_stock` until Phase 5 as a **write-only** compatibility bridge: it is written only on product create/update, the trigger does not maintain it, and nothing reads it. The framing is temporary, and it must never become a source of truth.
 - Add the validated `location` parameter to catalog endpoints, with `current_stock` interpreted as stock at that location.
 - Add backoffice endpoints returning a per-location stocks map.
@@ -179,9 +179,9 @@ Create the real multi-location schema, backfill all existing data to `VF`, and m
 
 ### Phase 3 — Catalog and cart isolation (frontend)
 
-**Status: In progress — the frontend catalog and cart isolation is implemented in code; the commit and the manual end-to-end verification against the real backend remain.**
+**Status: In progress — the frontend catalog and cart isolation, including the `location_id` checkout payload, is committed; the backend `VF` fallback was removed on 2026-11-05. The manual end-to-end verification against the real backend remains.**
 
-**Revision note (2026-11-03):** the catalog request now carries `?sede=VF|GO`, and the checkout payload carries `location_id`. The work items below describe the target and are implemented in the working tree; see `CHANGELOG-SEDES.md` for the shipped details. The phase is not committed, not pushed, and not verified end-to-end. Provider and admin product views still default to `VF` (Phase 5).
+**Revision note (2026-11-03; updated 2026-11-05):** the catalog request now carries `?sede=VF|GO`, and the checkout payload carries `location_id`. The work items below describe the target; the frontend isolation and the `location_id` payload are committed. See `CHANGELOG-SEDES.md` for the shipped details. The backend `VF` fallback was removed on 2026-11-05, so `POST /api/sales` now returns `400` when `location_id` is missing or invalid. The manual end-to-end verification against the real backend remains. Provider and admin product views still default to `VF` (Phase 5).
 
 #### Objective
 
@@ -312,7 +312,9 @@ The "Hoja de Administración" settings tab keeps `VF` as the only active configu
 
 ## HIGH RISK — Phase 2 schema work
 
-Phase 2 is the highest-risk phase in this workstream. The stock invariant lives in a database object that is **not versioned in the repository**, and the repository contains no migration history for it. A wrong edit here corrupts stock silently, and there is no committed artifact to diff against.
+Phase 2 is the highest-risk phase in this workstream. The stock invariant lives in a database object that **was not versioned in the repository** before 2026-11-05, and the repository still contains no migration history for the rest of the schema. A wrong edit here corrupts stock silently, and there was no committed artifact to diff against.
+
+**Status update (2026-11-05):** the live `reduce_stock_on_sale` trigger was extracted and reviewed; its definition is now versioned at `backend/supabase/migrations/20261105_reduce_stock_on_sale.sql` (working tree; not yet committed or applied), and the temporary `VF` fallback was removed from `POST /api/sales`. The remaining non-negotiables below still apply: RLS verification on `product_stock`, versioned `locations`/`product_stock` migrations, a rehearsal against production data, and a written rollback path.
 
 The following are non-negotiable for Phase 2:
 
@@ -354,8 +356,8 @@ These are open. Do not implement them, and do not assume an answer to them.
 | Phase | Name | Status | Date |
 |---|---|---|---|
 | 1 | Context and detection (frontend) | Completed | 2026-10-31 |
-| 2 | Data architecture (database and API read contract) | In progress — backend API migration done in code; versioned migrations + committed trigger definition, RLS verification on `product_stock`, and frontend `?sede` integration (implemented in code, commit pending) remain | Started 2026-11-03 |
-| 3 | Catalog and cart isolation (frontend) | In progress — frontend isolation implemented in code; commit and manual end-to-end verification pending | Started 2026-11-03 |
+| 2 | Data architecture (database and API read contract) | In progress — backend API migration done in code; trigger definition versioned at `backend/supabase/migrations/20261105_reduce_stock_on_sale.sql` (2026-11-05). Still pending: `locations`/`product_stock` table migrations, RLS verification on `product_stock`, atomic refund increment, and integration tests for the trigger/RPC path | Started 2026-11-03 |
+| 3 | Catalog and cart isolation (frontend) | In progress — frontend isolation and `location_id` payload committed; backend `VF` fallback removed 2026-11-05; manual end-to-end verification against the real backend pending | Started 2026-11-03 |
 | 4 | Secure checkout (backend) | Pending | — |
 | 5 | Backoffice management | Pending (UI shell implemented) | UI shell 2026-11-01 |
 

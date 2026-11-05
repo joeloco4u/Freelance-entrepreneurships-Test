@@ -267,19 +267,10 @@ export async function getSaleById(req: Request, res: Response) {
 
 // [PÚBLICO] Crear una venta — Flujo de Carrito
 export async function createSale(req: Request, res: Response) {
-  const rawLocation = req.body.location_id;
-  const hasLocation = rawLocation !== undefined && rawLocation !== null;
-  const parsedLocation = parseLocation(rawLocation);
+  const location = parseLocation(req.body?.location_id);
 
-  if (hasLocation && parsedLocation === null) {
-    return res.status(400).json({ error: "Sede inválida" });
-  }
-
-  const location = parsedLocation ?? DEFAULT_LOCATION;
-  if (!hasLocation) {
-    console.warn(
-      "[createSale] location_id ausente; usando VF (fallback temporal hasta Phase 3)",
-    );
+  if (location === null) {
+    return res.status(400).json({ error: "Sede inválida o ausente" });
   }
 
   const parsed = SaleRequestSchema.safeParse({

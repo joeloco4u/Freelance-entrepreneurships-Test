@@ -13,6 +13,29 @@
 
 ## [Unreleased]
 
+### Phase 2 cleanup — trigger versioned and temporary VF fallback removed
+
+- **Date:** `2026-11-05`
+- **Type:** `fix` (backend, database)
+- **Scope:** Phase 2/3 — version the live stock-deduction trigger and make `location_id` mandatory on sale creation.
+- **Files added:**
+  - `backend/supabase/migrations/20261105_reduce_stock_on_sale.sql`
+- **Files modified:**
+  - `backend/src/controllers/SaleController.ts`
+  - `CHANGELOG-SEDES.md`
+  - `SEDES-MASTER-PLAN.md`
+- **Description:** two related cleanups landed together. (1) The live `public.reduce_stock_on_sale()` PL/pgSQL function is now versioned in `backend/supabase/migrations/20261105_reduce_stock_on_sale.sql`, together with an `AFTER INSERT FOR EACH ROW` trigger named `reduce_stock_on_sale` on `public.sale_items` (`EXECUTE FUNCTION public.reduce_stock_on_sale()`). The function resolves `public.sales.location_id`, raises SQLSTATE `23502` when the sale has no location, deducts composed-product components or the simple product from `public.product_stock` filtered by `location_id`, and raises when the target row is not offered at that sede. The migration drops any trigger of the same name before creating it, so it is idempotent, but it has not been applied to any database. (2) `createSale` in `backend/src/controllers/SaleController.ts` no longer has the temporary `VF` fallback or its `console.warn`: it now calls `const location = parseLocation(req.body?.location_id);` and returns HTTP 400 `"Sede inválida o ausente"` for a missing or invalid `location_id`, before the schema parse and before any database work. `DEFAULT_LOCATION` is still imported and is still used by the refund restore paths for legacy sales that have no `location_id`.
+- **Behavior change:** `POST /api/sales` now requires a valid `location_id` (`VF` / `GO`); missing or invalid values return `400` instead of silently creating a `VF` sale.
+- **Status:** working-tree changes; not committed and not pushed.
+- **Verification:** code review approved; security audit passed with residual findings. The reviewer ran `npx tsc --noEmit -p backend/tsconfig.json` (exit 0) and targeted Biome lint on `SaleController.ts` (only two pre-existing warnings at untouched lines). No migrations were applied to any database.
+- **Residual / still open:**
+  - RLS verification on `product_stock`.
+  - Versioned migrations for the `locations` and `product_stock` tables.
+  - Atomic refund increment RPC.
+  - Integration tests for the trigger and RPC path.
+  - Confirm on the live database that the existing trigger name and table match this migration before applying it, to avoid creating a duplicate trigger.
+- **Policy note:** `CLAUDE.md:197` says not to commit `.sql` migrations, while `SEDES-MASTER-PLAN.md` requires versioned migrations. This file follows the plan and the conflict still needs a human decision.
+
 ### Catalog hero — decorative active-sede badge
 
 - **Date:** `2026-11-04`
@@ -97,9 +120,9 @@
 - **Verification:** `tsc --noEmit -p backend/tsconfig.json` exits with code 0; Biome lint reports 7 pre-existing warnings and 0 new ones.
 - **Known pending items:**
   - Atomic increment RPC for refunds.
-  - Versioned migrations and the trigger definition committed to the repository.
+  - Versioned migrations and the trigger definition committed to the repository: **trigger definition completed 2026-11-05** at `backend/supabase/migrations/20261105_reduce_stock_on_sale.sql`. The `locations` and `product_stock` table migrations are still pending.
   - RLS verification on `product_stock`.
-  - Remove the `VF` fallback once the frontend sends `location_id`.
+  - Remove the `VF` fallback once the frontend sends `location_id`: **completed 2026-11-05** — a missing or invalid `location_id` now returns `400` (`"Sede inválida o ausente"`) instead of defaulting to `VF`.
   - Per-sede administration matrix (Phase 5).
 
 ### Removed all mock mode code for Phase 2
