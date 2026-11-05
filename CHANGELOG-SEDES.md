@@ -13,6 +13,32 @@
 
 ## [Unreleased]
 
+### Phase 4 — single-RPC checkout and legacy stock trigger disabled
+
+- **Date:** `2026-11-05`
+- **Type:** `feat` (backend, database)
+- **Scope:** Phase 4 (Option A) — move sale creation onto a single transactional RPC and disable the legacy stock-deduction trigger so the invariant has exactly one owner. Prepared for the Test environment; no SQL was applied to any database from this workspace.
+- **Files added:**
+  - `backend/supabase/migrations/20261106_disable_reduce_stock_on_sale.sql`
+- **Files modified:**
+  - `backend/src/controllers/SaleController.ts`
+  - `CHANGELOG-SEDES.md`
+  - `SEDES-MASTER-PLAN.md`
+- **Description:** two changes landed together as the backend half of Phase 4. (1) A new migration, `backend/supabase/migrations/20261106_disable_reduce_stock_on_sale.sql`, **disables** (does not drop) the legacy `reduce_stock_on_sale` trigger on `public.sale_items`. It is dated `2026-11-06` so it sorts lexicographically after `20261105_reduce_stock_on_sale.sql`. The migration uses a fail-closed `DO` block that raises if `public.sale_items` is missing, if `public.process_location_checkout` is missing, or if the trigger is missing; it skips with a notice if the trigger is already disabled, and it verifies `tgenabled='D'` after the `ALTER`. Rolling it back requires **both** (a) deploying a controller that does not call the RPC (or making the RPC stop deducting) and (b) `ALTER TABLE public.sale_items ENABLE TRIGGER reduce_stock_on_sale;`. Enabling the trigger while the RPC still deducts stock would double-deduct. The `public.process_location_checkout` function is **not yet versioned in this repository**; it must be extracted with `pg_get_functiondef` before promoting beyond Test. (2) `createSale` in `backend/src/controllers/SaleController.ts` now keeps all validation and pre-computation intact — location parsing, Zod validation, payment normalization, product/entrepreneur lookups, composed-product demand expansion, cumulative stock pre-check, and the server-side `totalAmount` derived from DB prices — but replaces the separate `sales` insert + `sale_items` insert + compensating delete with one `supabaseAdmin.rpc("process_location_checkout", { p_consumer_id, p_total, p_payment_type, p_payment_method, p_note, p_location_id, p_cart_items })` call. `p_cart_items` carries one entry per processed item as `{ product_id, quantity, unit_price, subtotal }`, and the RPC expands composed products internally; `p_total` is always server-computed from DB prices and never taken from the request body. `p_payment_method` is nulled for credit sales, and `p_note` is trimmed and nulled when empty. The RPC returns the inserted `sale_id`; the controller re-fetches the complete sale with nested consumer data, and the notification/low-stock/Slack block is unchanged. Error mapping: SQLSTATE `23503` becomes `400 "Comprador inválido o inexistente"`, `23514` becomes `409 "Stock insuficiente para completar la venta"`, and other errors are rethrown to `respondWithError`. Errors are logged server-side with `{ code, consumer_id, location, itemCount }`, and no raw SQL reaches the client. If the RPC commits but the re-fetch fails, the controller logs `{ sale_id }` and returns `201 { id }` with notifications skipped, to avoid a duplicate retry. `extractInsertedSaleId` accepts a scalar string, an array, or an object with `sale_id`/`id`.
+- **Behavior change:** `POST /api/sales` now commits the sale header, its items, and the stock deduction through a single `process_location_checkout` RPC instead of the previous multi-step controller flow, and the legacy `reduce_stock_on_sale` trigger is intended to be disabled on Test. A sale therefore decrements stock exactly once, through the RPC. Validation failures and DB constraint violations map to `400`/`409` as described above.
+- **Status:** working-tree changes; not committed and not pushed. The migration has **not** been applied to any database from this workspace — it is ready for the Test project.
+- **Verification:** code review approved for Test with no blocking issues. Security audit cleared proceeding on Test, conditional on verifying the RPC ACL on the Test project: because the RPC is unversioned and lives only in Supabase, the repository cannot verify grants, so the operator must confirm that `anon`, `authenticated`, and `PUBLIC` cannot `EXECUTE` `public.process_location_checkout` and that only `service_role` can (for example with `has_function_privilege`), and must also confirm the trigger state is `tgenabled='D'`. No migrations were applied to any database.
+- **Residual / still open:**
+  - Version the `process_location_checkout` RPC definition in the repository (extract with `pg_get_functiondef`).
+  - Verify the RPC ACL and `PUBLIC` execute privileges on Test.
+  - Verify the trigger is disabled and a sale decrements stock exactly once, including composed products.
+  - Idempotency key (optional per the plan).
+  - Atomic refund increment.
+  - RLS verification on `product_stock`.
+  - Integration tests for the trigger/RPC path.
+  - The `23503`/`23514` message ambiguity and the `400`-vs-`409` pre-check inconsistency are known follow-ups.
+  - Pre-existing and out of scope: `POST /api/sales` remains public with a client-supplied `consumer_id`; no idempotency key yet; refund stock restore remains non-atomic; and `deleteSale` does not restore stock.
+
 ### Phase 2 cleanup — trigger versioned and temporary VF fallback removed
 
 - **Date:** `2026-11-05`

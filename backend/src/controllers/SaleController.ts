@@ -66,6 +66,32 @@ interface SellerGroup {
   products: ProductInfo[];
 }
 
+function extractInsertedSaleId(data: unknown): string | null {
+  if (typeof data === "string") {
+    const trimmed = data.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  if (Array.isArray(data)) {
+    for (const entry of data) {
+      const id = extractInsertedSaleId(entry);
+      if (id) return id;
+    }
+    return null;
+  }
+
+  if (typeof data === "object" && data !== null) {
+    const record = data as Record<string, unknown>;
+    const candidate = record.sale_id ?? record.id;
+    if (typeof candidate === "string") {
+      const trimmed = candidate.trim();
+      return trimmed ? trimmed : null;
+    }
+  }
+
+  return null;
+}
+
 // [ADMIN] Obtener todas las ventas
 const DELETE_SALE_OPTIONS = {
   messages: {
@@ -434,19 +460,62 @@ export async function createSale(req: Request, res: Response) {
       }
     }
 
-    // 3. Crear la cabecera de la venta
+    // 3. Crear la venta y sus detalles de forma atómica; el RPC descuenta stock
+    const cartItems = processedItems.map((item) => ({
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      subtotal: item.unit_price * item.quantity,
+    }));
+
+    const { data: checkoutData, error: checkoutError } = await supabaseAdmin.rpc(
+      "process_location_checkout",
+      {
+        p_consumer_id: consumer_id,
+        p_total: totalAmount,
+        p_payment_type: normalizedPaymentType,
+        p_payment_method:
+          normalizedPaymentType === "immediate" ? payment_method ?? null : null,
+        p_note: note?.trim() || null,
+        p_location_id: location,
+        p_cart_items: cartItems,
+      },
+    );
+
+    if (checkoutError) {
+      // 23503 is most commonly the consumer FK because product/location are
+      // pre-validated, but a concurrent deletion could also surface as 23503.
+      if (checkoutError.code === "23503") {
+        logError("createSale", checkoutError, {
+          code: checkoutError.code,
+          consumer_id,
+          location,
+          itemCount: cartItems.length,
+        });
+        return res.status(400).json({ error: "Comprador inválido o inexistente" });
+      }
+
+      if (checkoutError.code === "23514") {
+        logError("createSale", checkoutError, {
+          code: checkoutError.code,
+          consumer_id,
+          location,
+          itemCount: cartItems.length,
+        });
+        return res.status(409).json({ error: "Stock insuficiente para completar la venta" });
+      }
+
+      throw checkoutError;
+    }
+
+    const insertedSaleId = extractInsertedSaleId(checkoutData);
+    if (!insertedSaleId) {
+      throw new Error("process_location_checkout no devolvió un sale_id válido");
+    }
+
+    // 4. Recuperar la venta completa para las notificaciones
     const { data: sale, error: saleError } = await supabaseAdmin
       .from("sales")
-      .insert({
-        consumer_id,
-        total: totalAmount,
-        payroll_processed: false,
-        payment_type: normalizedPaymentType,
-        payment_method:
-          normalizedPaymentType === "immediate" ? payment_method : null,
-        note: note && typeof note === "string" && note.trim() ? note.trim() : null,
-        location_id: location,
-      })
       .select(
         `
         id,
@@ -461,28 +530,21 @@ export async function createSale(req: Request, res: Response) {
         )
       `,
       )
+      .eq("id", insertedSaleId)
       .single();
 
-    if (saleError || !sale || !sale.id) throw saleError;
-
-    // 4. Crear los detalles (sale_items)
-    const itemsToInsert = processedItems.map((item) => ({
-      sale_id: sale.id,
-      product_id: item.product_id,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-    }));
-
-    const { error: itemsError } = await supabaseAdmin
-      .from("sale_items")
-      .insert(itemsToInsert);
-
-    if (itemsError) {
-      await supabaseAdmin.from("sales").delete().eq("id", sale.id);
-      throw itemsError;
+    if (saleError || !sale) {
+      logError(
+        "createSale",
+        saleError ?? new Error("No se pudo recuperar la venta creada"),
+        { sale_id: insertedSaleId },
+      );
+      // The RPC already committed the sale, so returning 4xx/5xx would invite a
+      // duplicate retry. Notifications are skipped because the data is unavailable.
+      return res.status(201).json({ id: insertedSaleId });
     }
 
-    // 5. Stock deduction is handled by the reduce_stock_on_sale trigger on sale_items INSERT
+    // 5. El RPC process_location_checkout ya descontó el stock de la sede
 
     // --- PROCESO DE NOTIFICACIONES ---
     // Separamos en try-catch para que errores en notificaciones no fallen toda la venta
