@@ -2,10 +2,12 @@ import type { Request, Response } from "express";
 import {
   DEFAULT_LOCATION,
   isLocationCode,
+  LOCATION_CODES,
   parseLocation,
   type LocationCode,
 } from "../config/locations.js";
 import { supabaseAdmin } from "../db.js";
+import { StockMatrixSchema } from "../schemas/schema.js";
 import { respondWithError } from "../utils/errors.js";
 import { uploadProductImage } from "../services/uploadImageService.js";
 import { checkAndNotifyLowStock } from "../services/slackService.js";
@@ -13,6 +15,8 @@ import { enrichComposedStock } from "./ComposedProductController.js";
 
 const PRODUCTS_LOAD_ERROR =
   "No se pudieron cargar los productos. Intenta de nuevo más tarde.";
+
+const STOCK_BRIDGE_BATCH_SIZE = 20;
 
 const DELETE_OPTIONS = {
   messages: {
@@ -166,6 +170,7 @@ export async function getProductsByEntrepreneurship(
       ...product,
       current_stock:
         p.computed_stock ?? stockAtLocation(rows, location) ?? 0,
+      stocks: buildStocks(rows),
     };
   });
 
@@ -413,6 +418,222 @@ export async function updateProduct(req: Request, res: Response) {
       status: 400,
       fallback:
         "No se pudo actualizar el producto. Verifica los datos e intenta de nuevo.",
+    });
+  }
+}
+
+// [ADMIN/IT/PROVEEDOR] Actualizar la matriz de stock por sede de varios productos
+export async function updateProductStockMatrix(req: Request, res: Response) {
+  const parsed = StockMatrixSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: parsed.error.issues[0]?.message ?? "Datos de stock inválidos",
+    });
+  }
+
+  const { entrepreneurship_id, items } = parsed.data;
+  const requestingUser = req.user;
+  const rawRoles = requestingUser?.user_metadata?.roles;
+  const roles: string[] = Array.isArray(rawRoles) ? rawRoles : [];
+
+  try {
+    const { data: entrepreneurship, error: entError } = await supabaseAdmin
+      .from("entrepreneurships")
+      .select("owner_id")
+      .eq("id", entrepreneurship_id)
+      .single();
+
+    if (entError) throw entError;
+
+    if (!entrepreneurship) {
+      return res.status(404).json({ error: "Emprendimiento no encontrado" });
+    }
+
+    if (
+      roles.includes("PROVEEDOR") &&
+      entrepreneurship.owner_id !== requestingUser?.id
+    ) {
+      return res.status(403).json({
+        error:
+          "No tienes permiso para editar el stock de este emprendimiento",
+      });
+    }
+
+    const productIds = items.map((item) => item.product_id);
+
+    const { data: products, error: productsError } = await supabaseAdmin
+      .from("products")
+      .select("id, entrepreneurship_id, is_composed")
+      .in("id", productIds);
+
+    if (productsError) throw productsError;
+
+    const productRows = products ?? [];
+    const allBelongToEntrepreneurship =
+      productRows.length === productIds.length &&
+      productRows.every(
+        (product) => product.entrepreneurship_id === entrepreneurship_id,
+      );
+
+    if (!allBelongToEntrepreneurship) {
+      return res.status(400).json({
+        error: "Uno o más productos no pertenecen a este emprendimiento",
+      });
+    }
+
+    if (productRows.some((product) => product.is_composed === true)) {
+      return res.status(400).json({
+        error: "Los productos compuestos no permiten editar stock directamente",
+      });
+    }
+
+    const { data: currentStockRows, error: snapshotError } =
+      await supabaseAdmin
+        .from("product_stock")
+        .select("product_id, location_id, stock")
+        .in("product_id", productIds);
+
+    const canDetectLowStock = !snapshotError;
+
+    if (snapshotError) {
+      console.error(
+        "[updateProductStockMatrix] current stock snapshot:",
+        snapshotError,
+      );
+    }
+
+    const previousStock = new Map<string, number>();
+    for (const row of currentStockRows ?? []) {
+      previousStock.set(`${row.product_id}:${row.location_id}`, row.stock);
+    }
+
+    const offeredRows: Array<{
+      product_id: string;
+      location_id: LocationCode;
+      stock: number;
+    }> = [];
+
+    for (const item of items) {
+      for (const location of LOCATION_CODES) {
+        const cell = item.stocks[location];
+        if (cell.offered) {
+          offeredRows.push({
+            product_id: item.product_id,
+            location_id: location,
+            stock: cell.stock,
+          });
+        }
+      }
+    }
+
+    if (offeredRows.length > 0) {
+      const { error: upsertError } = await supabaseAdmin
+        .from("product_stock")
+        .upsert(offeredRows, {
+          onConflict: "product_id,location_id",
+          ignoreDuplicates: false,
+        });
+
+      if (upsertError) throw upsertError;
+    }
+
+    for (const location of LOCATION_CODES) {
+      const idsToDelete = items
+        .filter((item) => !item.stocks[location].offered)
+        .map((item) => item.product_id);
+
+      if (idsToDelete.length === 0) continue;
+
+      const { error: deleteError } = await supabaseAdmin
+        .from("product_stock")
+        .delete()
+        .eq("location_id", location)
+        .in("product_id", idsToDelete);
+
+      if (deleteError) throw deleteError;
+    }
+
+    const bridgeItems = items.filter((item) => {
+      const vfStock = item.stocks[DEFAULT_LOCATION];
+      const currentStock = vfStock.offered ? vfStock.stock : 0;
+
+      return (
+        previousStock.get(`${item.product_id}:${DEFAULT_LOCATION}`) !==
+        currentStock
+      );
+    });
+
+    for (
+      let index = 0;
+      index < bridgeItems.length;
+      index += STOCK_BRIDGE_BATCH_SIZE
+    ) {
+      const batch = bridgeItems.slice(index, index + STOCK_BRIDGE_BATCH_SIZE);
+
+      await Promise.all(
+        batch.map(async (item) => {
+          const vfStock = item.stocks[DEFAULT_LOCATION];
+          const currentStock = vfStock.offered ? vfStock.stock : 0;
+
+          const { error: bridgeError } = await supabaseAdmin
+            .from("products")
+            .update({ current_stock: currentStock })
+            .eq("id", item.product_id);
+
+          if (bridgeError) {
+            console.error(
+              "[updateProductStockMatrix] current_stock bridge:",
+              bridgeError,
+            );
+          }
+        }),
+      );
+    }
+
+    const lowStockByProduct = new Map<string, number>();
+
+    for (const item of items) {
+      for (const location of LOCATION_CODES) {
+        const cell = item.stocks[location];
+        if (!cell.offered || cell.stock >= 5) continue;
+
+        const key = `${item.product_id}:${location}`;
+        if (previousStock.get(key) === cell.stock) continue;
+
+        const current = lowStockByProduct.get(item.product_id);
+        if (current === undefined || cell.stock < current) {
+          lowStockByProduct.set(item.product_id, cell.stock);
+        }
+      }
+    }
+
+    if (canDetectLowStock && lowStockByProduct.size > 0) {
+      const payload = [...lowStockByProduct].map(([product_id, new_stock]) => ({
+        product_id,
+        new_stock,
+      }));
+
+      void checkAndNotifyLowStock(payload).catch((notificationError) => {
+        console.error(
+          "[updateProductStockMatrix] low stock notification:",
+          notificationError,
+        );
+      });
+    }
+
+    return res.status(200).json({
+      message: "Stock actualizado correctamente",
+      data: { updated: items.length },
+    });
+  } catch (error: unknown) {
+    return respondWithError(res, error, "updateProductStockMatrix", {
+      messages: {
+        "23514": "El stock debe ser un entero mayor o igual a 0",
+        "23503": "Uno o más productos no existen",
+      },
+      fallback:
+        "No se pudo actualizar el stock. Verifica los datos e intenta de nuevo.",
     });
   }
 }

@@ -7,6 +7,7 @@ import {
   getProductById,
   getProductsByEntrepreneurship,
   updateProduct,
+  updateProductStockMatrix,
 } from "../controllers/ProductController.js";
 import { authenticate } from "../middleware/auth.js";
 import { authorize } from "../middleware/role.js";
@@ -31,6 +32,11 @@ productRouter.post(
   authorize("PROVEEDOR", "IT"),
   upload.single("image"),
   createProduct,
+);
+productRouter.put(
+  "/stock/matrix",
+  authorize("ADMIN", "IT", "PROVEEDOR"),
+  updateProductStockMatrix,
 );
 productRouter.put(
   "/:id",

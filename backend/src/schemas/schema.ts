@@ -117,9 +117,49 @@ export const RegistrationRequestSchema = z.object({
 		.min(2, "Nombre de emprendimiento requerido"),
 });
 
+// --- Esquema para editar la matriz de stock por sede ---
+export const StockCellSchema = z.strictObject({
+	offered: z.boolean(),
+	stock: z.number().int().min(0).max(2147483647),
+});
+
+export const StockMatrixSchema = z
+	.strictObject({
+		entrepreneurship_id: z.uuid("Emprendimiento inválido"),
+		items: z
+			.array(
+				z.strictObject({
+					product_id: z.uuid("ID de producto inválido"),
+					stocks: z.record(z.enum(LOCATION_CODES), StockCellSchema),
+				}),
+			)
+			.min(1)
+			.max(200),
+	})
+	.superRefine((value, ctx) => {
+		const seen = new Set<string>();
+
+		for (const item of value.items) {
+			const key = item.product_id.toLowerCase();
+
+			if (seen.has(key)) {
+				ctx.addIssue({
+					code: "custom",
+					path: ["items"],
+					message: "Producto duplicado en la matriz",
+				});
+				return;
+			}
+
+			seen.add(key);
+		}
+	});
+
 // --- Extraer los Tipos de TypeScript de los esquemas ---
 export type PurchaseInput = z.infer<typeof PurchaseSchema>;
 export type SaleRequestInput = z.infer<typeof SaleRequestSchema>;
 export type RegistrationRequestInput = z.infer<
 	typeof RegistrationRequestSchema
 >;
+export type StockCellInput = z.infer<typeof StockCellSchema>;
+export type StockMatrixInput = z.infer<typeof StockMatrixSchema>;

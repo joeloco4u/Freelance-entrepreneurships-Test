@@ -375,6 +375,8 @@ The frontend UI shell for Phase 5 was implemented on **2026-11-01**. It covers t
 
 The phase remains **Pending** until the real `location_id` data and the Phase 2/4 backend land. Until then, real mode renders no Sede column or filter (sales do not yet carry `location_id`), the GO settings block stays inert, and the product matrix is inert because its per-sede fields are not serialized.
 
+**Backend update (2026-11-05, working tree):** the backend read contract and the dedicated write endpoint are now implemented in code. The product list responses include a per-product `stocks` object with `VF` and `GO` `{ offered, stock }` cells while keeping `current_stock` for the requested `?sede`, and `PUT /api/products/stock/matrix` accepts up to 200 products with both sede cells validated by `StockCellSchema` / `StockMatrixSchema`. This is working-tree code only: no migration or RPC was added or applied. The frontend matrix modal (desktop table, mobile cards, and `SearchInput`) remains pending, and Phase 5 is still **Pending**.
+
 ## Agent checklist
 
 Before starting work on any phase, confirm each item:

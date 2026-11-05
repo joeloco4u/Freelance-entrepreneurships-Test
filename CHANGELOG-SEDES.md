@@ -13,6 +13,30 @@
 
 ## [Unreleased]
 
+### Phase 5 — backend per-sede stock matrix read contract and bulk update endpoint
+
+- **Date:** `2026-11-05`
+- **Type:** `feat` (backend)
+- **Scope:** Phase 5 (backend half). Adds the per-sede stock read contract and a dedicated bulk stock-matrix update endpoint. Backend only; the frontend matrix modal is not started.
+- **Files added:** none.
+- **Files modified:**
+  - `backend/src/controllers/ProductController.ts`
+  - `backend/src/routes/productRoutes.ts`
+  - `backend/src/schemas/schema.ts`
+  - `CHANGELOG-SEDES.md`
+  - `SEDES-MASTER-PLAN.md`
+- **Description:** the backend half of the Phase 5 stock matrix is now in the working tree. (1) `getProductsByEntrepreneurship` (`GET /api/products/entrepreneurship/:entrepreneurship_id`) now also returns, per product, a `stocks` object shaped as `{ VF: { offered, stock }, GO: { offered, stock } }`, mirroring the existing behavior of `getAllProducts` (`GET /api/products`), while the existing `current_stock` field is preserved and still reports the stock at the requested `?sede` (defaulting to `VF`), so current consumers are unchanged. `buildStocks` maps the `product_stock` rows to those cells, defaulting an absent location to `{ offered: false, stock: 0 }`. (2) A new `updateProductStockMatrix` controller implements the dedicated bulk write path instead of overloading the multipart product route. Its contract is `PUT /api/products/stock/matrix` with JSON `{ entrepreneurship_id, items: [{ product_id, stocks: { VF: { offered, stock }, GO: { offered, stock } } }] }`, returning `200 { message: "Stock actualizado correctamente", data: { updated: <number of items> } }`. (3) `StockCellSchema`, `StockMatrixSchema`, `StockCellInput`, and `StockMatrixInput` were added to `backend/src/schemas/schema.ts`: strict objects reject unknown fields; `entrepreneurship_id` and `product_id` must be UUIDs; `items` must contain 1 to 200 entries; both `VF` and `GO` are required per item; `stock` must be an integer from 0 to 2147483647; `offered` must be boolean; and duplicate `product_id` values are rejected case-insensitively via `superRefine`. (4) The route is registered after `authenticate` and before `PUT /:id` with `authorize("ADMIN", "IT", "PROVEEDOR")` so the literal `/stock/matrix` path is not captured by `/:id`. (5) Authorization is enforced server-side: `PROVEEDOR` must own the `entrepreneurship_id`, every product must belong to that entrepreneurship, and composed products are rejected because their availability is computed, not edited. (6) Write semantics are absolute and idempotent: `offered: true` produces one bulk upsert of `product_stock` rows on `(product_id, location_id)`, while `offered: false` deletes only that location's row. (7) `products.current_stock` is best-effort synced to the `VF` value (`0` when `VF` is not offered) in batches of 20; the bridge is not read back and its failures are logged without failing the request. (8) Low-stock notification runs only for changed, still-offered cells below 5 units, deduplicated per product by keeping the smallest stock, and is fire-and-forget with error logging so it never blocks the `200` response. (9) Database errors go through `respondWithError` with stock-specific messages for `23514` and `23503`; unexpected database failures remain `500`. No RPC or migration was added — the transactional RPC was explicitly deferred.
+- **Behavior change:** clients can now read both sedes' offered/stock state from the product list while `current_stock` keeps its existing per-`?sede` meaning, and administrators and providers can update the full matrix for up to 200 products in a single `PUT /api/products/stock/matrix` request. Offering a sede upserts its row; un-offering it removes only that sede's row. Repeated identical requests are safe because the values are absolute.
+- **Status:** prepared for commit/push to the `Freelance-entrepreneurships-Test` remote; the original repository is never targeted. Backend-only in the working tree; the frontend modal is not started.
+- **Verification:** code review and security audit both returned "safe to commit". No migrations were applied and no database changes were made. `express.json`'s default 100KB body limit was confirmed sufficient for the 200-item cap.
+- **Residual / still open:**
+  - No transaction spans the upsert, the delete, and the `current_stock` bridge; the transactional RPC was explicitly deferred.
+  - Pre-existing app-wide `user_metadata.roles` authorization issue (not introduced by this change): roles are read from client-influenced user metadata.
+  - Pre-existing `deleteProduct` IDOR.
+  - Per-sede low-stock wording is not implemented yet; notifications still carry a single product-level stock value.
+  - The frontend matrix modal (desktop table, mobile cards, and `SearchInput`) remains pending.
+  - RLS verification on `product_stock` and integration tests for the matrix path remain open.
+
 ### Phase 4 — single-RPC checkout and legacy stock trigger disabled
 
 - **Date:** `2026-11-05`
