@@ -1,15 +1,18 @@
 import { Search, X } from "lucide-react";
+import type React from "react";
 
 interface SearchInputProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
 }
 
 export default function SearchInput({
   value,
   onChange,
   placeholder = "Buscar...",
+  onKeyDown,
 }: SearchInputProps) {
   return (
     <div className="relative flex-1 group w-full">
@@ -21,6 +24,7 @@ export default function SearchInput({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
         className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-100 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/10 focus:border-primary outline-none transition-all text-xs md:text-sm"
       />

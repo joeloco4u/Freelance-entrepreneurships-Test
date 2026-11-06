@@ -50,22 +50,37 @@ export function useProducts(entrepreneurshipId?: string) {
     name: "",
   });
 
-  const fetchProducts = useCallback(async () => {
-    if (!entrepreneurshipId) return;
+  const loadProducts = useCallback(
+    async (options: { showSkeleton: boolean; notifyError: boolean }) => {
+      if (!entrepreneurshipId) return;
 
-    try {
-      setLoading(true);
-      const data = await getEntrepreneurshipProducts(entrepreneurshipId);
-      setProducts(data);
-    } catch (error) {
-      console.error(error);
-      const errorMessage =
-        getErrorMessage(error, ERROR_MESSAGES.products.load);
-      toast.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  }, [entrepreneurshipId]);
+      try {
+        if (options.showSkeleton) setLoading(true);
+        const data = await getEntrepreneurshipProducts(entrepreneurshipId);
+        setProducts(data);
+      } catch (error) {
+        console.error(error);
+        if (options.notifyError) {
+          toast.error(getErrorMessage(error, ERROR_MESSAGES.products.load));
+        } else {
+          toast.warn(ERROR_MESSAGES.products.refreshAfterStock);
+        }
+      } finally {
+        if (options.showSkeleton) setLoading(false);
+      }
+    },
+    [entrepreneurshipId],
+  );
+
+  const fetchProducts = useCallback(
+    () => loadProducts({ showSkeleton: true, notifyError: true }),
+    [loadProducts],
+  );
+
+  const refreshProducts = useCallback(
+    () => loadProducts({ showSkeleton: false, notifyError: false }),
+    [loadProducts],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -241,6 +256,7 @@ export function useProducts(entrepreneurshipId?: string) {
 
   return {
     products: filteredProducts,
+    allProducts: products,
     allProductsCount: products.length,
     loading,
     isSaving,
@@ -261,5 +277,6 @@ export function useProducts(entrepreneurshipId?: string) {
     saveProduct,
     confirmDelete,
     fetchProducts,
+    refreshProducts,
   };
 }

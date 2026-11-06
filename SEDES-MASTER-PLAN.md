@@ -377,6 +377,8 @@ The phase remains **Pending** until the real `location_id` data and the Phase 2/
 
 **Backend update (2026-11-05, working tree):** the backend read contract and the dedicated write endpoint are now implemented in code. The product list responses include a per-product `stocks` object with `VF` and `GO` `{ offered, stock }` cells while keeping `current_stock` for the requested `?sede`, and `PUT /api/products/stock/matrix` accepts up to 200 products with both sede cells validated by `StockCellSchema` / `StockMatrixSchema`. This is working-tree code only: no migration or RPC was added or applied. The frontend matrix modal (desktop table, mobile cards, and `SearchInput`) remains pending, and Phase 5 is still **Pending**.
 
+**Frontend update (2026-11-05, working tree):** the backend read/write contract and the frontend matrix modal are now implemented in the working tree. The modal is opened from the products header, fetches the entrepreneurship products only while open, excludes composed products, and provides desktop table plus mobile cards and search over the `VF`/`GO` offered/stock cells; saving sends only dirty products to `PUT /api/products/stock/matrix` and refreshes the page list without unmounting the modal. The frontend is not committed or pushed and is not deployed. Phase 5 remains **Pending** because the admin sede filters/payroll, the `products.current_stock` removal, and the `product_stock` RLS verification are still open.
+
 ## Agent checklist
 
 Before starting work on any phase, confirm each item:

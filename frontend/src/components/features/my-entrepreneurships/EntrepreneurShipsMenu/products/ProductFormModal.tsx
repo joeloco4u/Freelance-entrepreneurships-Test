@@ -8,6 +8,12 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import {
+  DEFAULT_LOCATION,
+  LOCATIONS,
+  LOCATION_CODES,
+} from "../../../../../config/locations";
+import { MAX_STOCK } from "../../../../../constants/stock";
 import type {
   Category,
   ComposedProductInput,
@@ -18,6 +24,7 @@ import { getCategories } from "../../../../../services/categoryService";
 import { getEntrepreneurshipProducts } from "../../../../../services/productService";
 import BaseFormModal from "../../../../shared/BaseFormModal";
 import ImageUpload from "../../../../shared/ImageUpload";
+import { SedeBadge } from "../../../../shared/SedeBadge";
 import { useComposedProductForm } from "./hooks/useComposedProductForm";
 import { useProductForm } from "./hooks/useProductForm";
 
@@ -96,7 +103,6 @@ export default function ProductFormModal({
     } else {
       const dataToSend: ProductInput = {
         ...simpleForm.formData,
-        current_stock: simpleForm.formData.current_stock,
         entrepreneurship_id: entrepreneurshipId,
         imageFile: simpleForm.selectedFile,
       };
@@ -175,7 +181,7 @@ export default function ProductFormModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className={isComposed ? "grid grid-cols-2 gap-4" : "grid gap-4"}>
           {/* Precio */}
           <div>
             <label
@@ -214,39 +220,6 @@ export default function ProductFormModal({
             </div>
           </div>
 
-          {/* Stock (solo para productos simples) */}
-          {!isComposed && (
-            <div>
-              <label
-                htmlFor="stock"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Stock
-              </label>
-              <div className="relative">
-                <List
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  size={18}
-                />
-                <input
-                  id="stock"
-                  required
-                  type="number"
-                  min="0"
-                  placeholder="0"
-                  className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm"
-                  value={simpleForm.formData.current_stock}
-                  onChange={(e) =>
-                    simpleForm.updateField(
-                      "current_stock",
-                      parseInt(e.target.value, 10) || 0,
-                    )
-                  }
-                />
-              </div>
-            </div>
-          )}
-
           {/* Stock informativo para combos */}
           {isComposed && (
             <div>
@@ -265,6 +238,116 @@ export default function ProductFormModal({
             </div>
           )}
         </div>
+
+        {/* Stock inicial por sede (solo para productos simples) */}
+        {!isComposed && (
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700">
+                Stock inicial por sede
+              </p>
+              <p className="text-xs text-gray-400">
+                {isEditing
+                  ? "La disponibilidad por sede se edita desde el panel de stock. En este formulario solo puedes ajustar el stock de Valle Frío."
+                  : "Define la disponibilidad inicial de cada sede. Stock 0 = agotado, pero visible."}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {LOCATION_CODES.map((location) => {
+                const cell = simpleForm.formData.stocks[location];
+                const isDefaultLocation = location === DEFAULT_LOCATION;
+
+                return (
+                  <div
+                    key={location}
+                    role="group"
+                    aria-label={LOCATIONS[location].name}
+                    className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <SedeBadge codes={[location]} />
+                      <span className="text-xs font-semibold text-gray-500">
+                        {LOCATIONS[location].name}
+                      </span>
+                    </div>
+
+                    <label className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-gray-500">
+                        Ofrecer
+                      </span>
+                      <Switch
+                        checked={cell.offered}
+                        disabled={isEditing}
+                        onChange={(checked) =>
+                          simpleForm.updateStock(location, {
+                            offered: checked,
+                          })
+                        }
+                        aria-label={`Ofrecer en ${LOCATIONS[location].name}`}
+                        style={{
+                          backgroundColor: cell.offered
+                            ? "var(--color-primary)"
+                            : undefined,
+                        }}
+                      />
+                    </label>
+
+                    {cell.offered ? (
+                      <div>
+                        <label
+                          htmlFor={`initial-stock-${location}`}
+                          className="block text-xs font-semibold text-gray-500 mb-1"
+                        >
+                          Stock inicial
+                        </label>
+                        <input
+                          id={`initial-stock-${location}`}
+                          type="number"
+                          min={0}
+                          max={MAX_STOCK}
+                          step={1}
+                          inputMode="numeric"
+                          value={cell.stock}
+                          disabled={
+                            !cell.offered || (isEditing && !isDefaultLocation)
+                          }
+                          onChange={(event) => {
+                            const value = Number.parseInt(
+                              event.target.value,
+                              10,
+                            );
+                            simpleForm.updateStock(location, {
+                              stock: Number.isNaN(value) ? 0 : value,
+                            });
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") event.preventDefault();
+                          }}
+                          aria-label={`Stock inicial en ${LOCATIONS[location].name}`}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm text-center"
+                        />
+
+                        <div className="mt-1">
+                          {cell.stock === 0 ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 text-[10px] font-bold uppercase">
+                              Agotado
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-1">
+                        <span className="text-[10px] font-bold uppercase text-gray-400">
+                          No ofrecido
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Componentes del Combo */}
         {isComposed && (

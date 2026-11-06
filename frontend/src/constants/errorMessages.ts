@@ -30,6 +30,12 @@ export const ERROR_MESSAGES = {
     save: "Error al guardar el producto. Verifica los datos e intenta de nuevo.",
     delete: "No se pudo eliminar el producto. Intenta de nuevo más tarde.",
     loadCombo: "No se pudo cargar el combo. Intenta de nuevo más tarde.",
+    stockMatrix:
+      "No se pudo actualizar el stock. Verifica los datos e intenta de nuevo.",
+    stockMatrixLimit:
+      "Solo puedes guardar hasta 200 productos a la vez. Guarda los cambios en partes.",
+    refreshAfterStock:
+      "El stock se actualizó, pero no se pudo refrescar la lista. Recarga la página.",
   },
   entrepreneurships: {
     load: "No se pudieron cargar los emprendimientos. Verifica tu conexión e intenta de nuevo.",

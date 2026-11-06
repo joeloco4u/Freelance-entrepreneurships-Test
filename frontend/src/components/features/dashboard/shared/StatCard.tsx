@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 interface StatCardProps {
   label: string;
@@ -6,6 +7,7 @@ interface StatCardProps {
   icon: LucideIcon;
   color: string;
   description: string;
+  secondary?: ReactNode;
 }
 
 export function StatCard({
@@ -14,6 +16,7 @@ export function StatCard({
   icon: Icon,
   color,
   description,
+  secondary,
 }: StatCardProps) {
   return (
     <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
@@ -31,6 +34,11 @@ export function StatCard({
         <h3 className="text-gray-500 text-sm font-medium">{label}</h3>
         <p className="text-3xl font-bold text-gray-900">{value}</p>
         <p className="text-xs text-gray-400 font-medium pt-1">{description}</p>
+        {secondary ? (
+          <p className="text-[11px] text-gray-400 font-medium tabular-nums pt-0.5 leading-tight">
+            {secondary}
+          </p>
+        ) : null}
       </div>
     </div>
   );

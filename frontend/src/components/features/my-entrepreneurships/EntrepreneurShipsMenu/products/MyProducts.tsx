@@ -1,6 +1,6 @@
 import type { MenuProps } from "antd";
 import { Edit2, Trash2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useProducts } from "../../../../../hooks/useProducts";
 import type { EntrepreneurshipProduct } from "../../../../../types";
@@ -12,6 +12,7 @@ import ProductFormModal from "./ProductFormModal";
 import ProductHeader from "./ProductHeader";
 import ProductTableDesktop from "./ProductTableDesktop";
 import ProductTableSkeleton from "./ProductTableSkeleton";
+import StockMatrixModal from "./StockMatrixModal";
 
 export default function MyProducts() {
   const { id: entrepreneurshipId } = useParams<{ id: string }>();
@@ -19,6 +20,7 @@ export default function MyProducts() {
   const location = useLocation();
   const {
     products,
+    allProducts,
     loading,
     searchQuery,
     setSearchQuery,
@@ -37,7 +39,14 @@ export default function MyProducts() {
     closeDeleteModal,
     saveProduct,
     confirmDelete,
+    refreshProducts,
   } = useProducts(entrepreneurshipId);
+
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const hasEditableProducts = useMemo(
+    () => allProducts.some((product) => !product.is_composed),
+    [allProducts],
+  );
 
   const getActionMenuItems = (product: EntrepreneurshipProduct): MenuProps => ({
     items: [
@@ -78,7 +87,11 @@ export default function MyProducts() {
 
   return (
     <div className="space-y-6 pb-20 md:pb-0">
-      <ProductHeader onAddProduct={() => openFormModal()} />
+      <ProductHeader
+        onAddProduct={() => openFormModal()}
+        onEditStock={() => setIsStockModalOpen(true)}
+        disableStockButton={!hasEditableProducts}
+      />
 
       <ProductFilters
         searchQuery={searchQuery}
@@ -120,6 +133,15 @@ export default function MyProducts() {
         onSave={saveProduct}
         entrepreneurshipId={entrepreneurshipId ?? ""}
       />
+
+      {isStockModalOpen && (
+        <StockMatrixModal
+          isOpen={isStockModalOpen}
+          entrepreneurshipId={entrepreneurshipId ?? ""}
+          onClose={() => setIsStockModalOpen(false)}
+          onSaved={refreshProducts}
+        />
+      )}
 
       <ConfirmationModal
         isOpen={deleteModal.isOpen}

@@ -123,6 +123,12 @@ export const StockCellSchema = z.strictObject({
 	stock: z.number().int().min(0).max(2147483647),
 });
 
+export const ProductStocksSchema = z.record(
+	z.enum(LOCATION_CODES),
+	StockCellSchema,
+);
+export type ProductStocksInput = z.infer<typeof ProductStocksSchema>;
+
 export const StockMatrixSchema = z
 	.strictObject({
 		entrepreneurship_id: z.uuid("Emprendimiento inválido"),

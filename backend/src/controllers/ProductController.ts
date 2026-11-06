@@ -7,7 +7,10 @@ import {
   type LocationCode,
 } from "../config/locations.js";
 import { supabaseAdmin } from "../db.js";
-import { StockMatrixSchema } from "../schemas/schema.js";
+import {
+  ProductStocksSchema,
+  StockMatrixSchema,
+} from "../schemas/schema.js";
 import { respondWithError } from "../utils/errors.js";
 import { uploadProductImage } from "../services/uploadImageService.js";
 import { checkAndNotifyLowStock } from "../services/slackService.js";
@@ -219,25 +222,55 @@ export async function createProduct(req: Request, res: Response) {
   // 1. Extracción y conversión de tipos (FormData envía strings)
   const { entrepreneurship_id, name, is_active, category_id } = req.body;
   const price = parseFloat(req.body.price);
-  const current_stock = parseInt(req.body.current_stock, 10);
 
   // 2. Validación de campos obligatorios
-  if (
-    !entrepreneurship_id ||
-    !name ||
-    Number.isNaN(price) ||
-    price < 0 ||
-    Number.isNaN(current_stock) ||
-    current_stock < 0
-  ) {
+  if (!entrepreneurship_id || !name || Number.isNaN(price) || price < 0) {
     return res.status(400).json({
       error:
-        "Los campos entrepreneurship_id, name, price y current_stock son obligatorios y deben ser válidos",
+        "Los campos entrepreneurship_id, name y price son obligatorios y deben ser válidos",
     });
   }
 
+  // 3. Parseo y validación de la matriz de stock por sede
+  const rawStocks = req.body.stocks;
+  if (typeof rawStocks !== "string" || rawStocks.trim() === "") {
+    return res
+      .status(400)
+      .json({ error: "El stock por sede (stocks) es obligatorio" });
+  }
+
+  let parsedStocks: unknown;
   try {
-    // 3. Verificamos que el emprendimiento exista y pertenezca al usuario
+    parsedStocks = JSON.parse(rawStocks);
+  } catch {
+    return res
+      .status(400)
+      .json({ error: "El stock por sede no es un JSON válido" });
+  }
+
+  const stocksResult = ProductStocksSchema.safeParse(parsedStocks);
+  if (!stocksResult.success) {
+    return res.status(400).json({ error: "Datos de stock inválidos" });
+  }
+  const stocks = stocksResult.data;
+
+  // 4. Suma del stock ofrecido (puente NOT NULL de products.current_stock)
+  let currentStock = 0;
+  for (const location of LOCATION_CODES) {
+    const cell = stocks[location];
+    if (cell.offered) {
+      currentStock += cell.stock;
+    }
+  }
+
+  if (currentStock > 2147483647) {
+    return res
+      .status(400)
+      .json({ error: "El stock total por sede excede el máximo permitido" });
+  }
+
+  try {
+    // 5. Verificamos que el emprendimiento exista y pertenezca al usuario
     const { data: entrepreneurship, error: entError } = await supabaseAdmin
       .from("entrepreneurships")
       .select("owner_id")
@@ -254,7 +287,7 @@ export async function createProduct(req: Request, res: Response) {
       });
     }
 
-    // 4. Lógica de subida de imagen al Storage
+    // 6. Lógica de subida de imagen al Storage
     let imageUrl: string | null = null;
     if (imageFile) {
       // Normalizamos el nombre del archivo para evitar caracteres extraños en la URL
@@ -265,14 +298,14 @@ export async function createProduct(req: Request, res: Response) {
       imageUrl = await uploadProductImage(imageFile, path);
     }
 
-    // 5. Inserción en la base de datos
+    // 7. Inserción en la base de datos
     const { data: newProduct, error: insertError } = await supabaseAdmin
       .from("products")
       .insert({
         entrepreneurship_id,
         name,
         price,
-        current_stock,
+        current_stock: currentStock,
         image: imageUrl, // Usamos la URL generada por el Storage
         is_active: is_active === "true" || is_active === true, // Manejo de booleano desde FormData
         category_id: category_id ? parseInt(category_id, 10) : null,
@@ -283,21 +316,36 @@ export async function createProduct(req: Request, res: Response) {
     if (insertError) throw insertError;
     if (!newProduct) throw new Error("No se pudo crear el producto");
 
-    // 6. Asociar el producto a la sede por defecto (puente temporal)
-    const { error: stockError } = await supabaseAdmin
-      .from("product_stock")
-      .insert({
-        product_id: newProduct.id,
-        location_id: DEFAULT_LOCATION,
-        stock: current_stock,
-      });
+    // 8. Asociar el producto a cada sede ofrecida
+    const stockRows: Array<{
+      product_id: string;
+      location_id: LocationCode;
+      stock: number;
+    }> = [];
 
-    if (stockError) {
-      await supabaseAdmin.from("products").delete().eq("id", newProduct.id);
-      throw stockError;
+    for (const location of LOCATION_CODES) {
+      const cell = stocks[location];
+      if (cell.offered) {
+        stockRows.push({
+          product_id: newProduct.id,
+          location_id: location,
+          stock: cell.stock,
+        });
+      }
     }
 
-    // 7. Respuesta exitosa
+    if (stockRows.length > 0) {
+      const { error: stockError } = await supabaseAdmin
+        .from("product_stock")
+        .insert(stockRows);
+
+      if (stockError) {
+        await supabaseAdmin.from("products").delete().eq("id", newProduct.id);
+        throw stockError;
+      }
+    }
+
+    // 9. Respuesta exitosa
     return res.status(201).json(newProduct);
   } catch (error: unknown) {
     return respondWithError(res, error, "createProduct", {

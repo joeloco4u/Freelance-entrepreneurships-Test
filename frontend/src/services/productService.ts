@@ -4,6 +4,8 @@ import type {
   CatalogProduct,
   EntrepreneurshipProduct,
   ProductInput,
+  StockMatrixPayload,
+  StockMatrixResponse,
 } from "../types";
 
 /**
@@ -18,6 +20,7 @@ const prepareFormData = (data: Partial<ProductInput>) => {
   if (data.price != null) formData.append("price", data.price.toString());
   if (data.current_stock != null)
     formData.append("current_stock", data.current_stock.toString());
+  if (data.stocks) formData.append("stocks", JSON.stringify(data.stocks));
   if (data.is_active !== undefined)
     formData.append("is_active", String(data.is_active));
   if (data.entrepreneurship_id)
@@ -70,12 +73,24 @@ export async function getActiveProducts(
 
 export async function getEntrepreneurshipProducts(
   entrepreneurshipId: string,
+  signal?: AbortSignal,
 ): Promise<EntrepreneurshipProduct[]> {
   const { data } = await api.get<EntrepreneurshipProduct[]>(
     `/products/entrepreneurship/${entrepreneurshipId}`,
+    { signal },
   );
   return data;
 }
+
+export const updateProductStockMatrix = async (
+  data: StockMatrixPayload,
+): Promise<StockMatrixResponse> => {
+  const response = await api.put<StockMatrixResponse>(
+    "/products/stock/matrix",
+    data,
+  );
+  return response.data;
+};
 
 export const deleteProduct = async (productId: string): Promise<void> => {
   await api.delete(`/products/${productId}`);

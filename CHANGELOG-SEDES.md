@@ -13,6 +13,72 @@
 
 ## [Unreleased]
 
+### Admin Dashboard — per-sede revenue breakdown on stat cards
+
+- **Date:** `2026-11-06`
+- **Type:** `feat` (frontend)
+- **Scope:** Admin Dashboard multi-location awareness. Adds a per-sede breakdown line to the admin "Ventas Globales" and "Pendiente Liquidar" stat cards. Frontend only; no backend, schema, RLS, or database changes.
+- **Files added:** none.
+- **Files modified:**
+  - `frontend/src/components/features/dashboard/shared/StatCard.tsx`
+  - `frontend/src/components/features/dashboard/hooks/useGeneralStats.ts`
+  - `frontend/src/components/features/dashboard/AdminSection.tsx`
+  - `frontend/src/types/index.ts`
+  - `CHANGELOG-SEDES.md`
+- **Description:** the admin dashboard now splits its headline revenue metrics by sede. No API or data contract changed; the breakdown is derived entirely from the sales already loaded by `useAdminData`.
+  - **`StatCard` (`shared/StatCard.tsx`):** gained an optional `secondary?: ReactNode` prop. When provided, it renders after the existing description inside the same `space-y-1` block as a paragraph styled `text-[11px] text-gray-400 font-medium tabular-nums pt-0.5 leading-tight`. The prop is optional and defaults to `undefined`, so every existing consumer keeps its current rendering unchanged. Only the dashboard-scoped `frontend/src/components/features/dashboard/shared/StatCard.tsx` was touched; the separate shared component at `frontend/src/components/shared/StatCard.tsx` was not modified.
+  - **`useGeneralStats` (`hooks/useGeneralStats.ts`):** now computes `revenueBySede` and `pendingBySede` (both typed `SedeBreakdown = { VF, GO, unassigned }`) in the same single pass over `sales` that already produced `totalRevenue` and `pendingPayroll`. Each sale contributes to exactly one bucket per metric, so `VF + GO + unassigned` always equals the headline value for both metrics. Both breakdowns are exposed on `adminStats`.
+  - **Sede normalization:** `sale.location_id` is normalized with `trim().toUpperCase()` before being classified with `isLocationCode`. Missing, empty, or unknown values fall into the `unassigned` bucket; they are never coerced to `VF`.
+  - **Pending predicate correction (intentional behavior change):** the `pendingPayroll` predicate was corrected to the canonical credit-only rule `payment_type !== "immediate" && !payroll_processed && !refunded`, matching `useAdminData` and the backend's refusal to liquidate immediate-payment sales. This is an intentional change to what the "Pendiente Liquidar" card reports: immediate-payment sales no longer inflate the pending total, and refunded sales are excluded. The per-sede `pendingBySede` buckets use the same rule.
+  - **Gross revenue preserved:** `totalRevenue` intentionally remains gross (`sum(sale.total)`) and is unchanged by this work; the per-sede revenue buckets are accumulated with the same rule, so they sum to the same gross figure.
+  - **`AdminSection` (`AdminSection.tsx`):** renders `VF: $X • GO: $Y` as the `secondary` line on the "Ventas Globales" (from `revenueBySede`) and "Pendiente Liquidar" (from `pendingBySede`) cards. It appends `Sin sede: $Z` only when `unassigned > 0`, and suppresses the whole line (passing `null`) when all three buckets are zero. Values are formatted with the existing `formatCurrency` helper.
+  - **`GeneralDashboard.tsx`:** unchanged. It already forwards `stats.adminStats` to `AdminSection` as a whole, so the two new `adminStats` fields flow through without a code change.
+  - **Type placement:** `SedeBreakdown` lives in `frontend/src/types/index.ts`; both the hook and `AdminSection` import it with `import type`.
+- **Verification:** ESLint passes on the touched files. No build or type-check was run, per the project Build Policy. Code review and security audit returned PASS with only low-priority nits; the `text-[11px] text-gray-400` contrast follows the product's explicit styling request.
+
+### Phase 5 — frontend per-sede stock matrix modal (desktop table, mobile cards, search)
+
+- **Date:** `2026-11-05`
+- **Type:** `feat` (frontend)
+- **Scope:** Phase 5 (frontend half). Adds the entrepreneur-facing per-sede stock matrix modal that reads and writes the completed backend matrix contract. Frontend only; no backend, schema, RLS, or database changes.
+- **Files added:**
+  - `frontend/src/hooks/useStockMatrix.ts`
+  - `frontend/src/constants/stock.ts`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/StockMatrixModal.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/StockMatrixTable.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/StockMatrixCardsMobile.tsx`
+- **Files modified:**
+  - `frontend/src/types/index.ts`
+  - `frontend/src/services/productService.ts`
+  - `frontend/src/hooks/useProducts.ts`
+  - `frontend/src/components/shared/BaseFormModal.tsx`
+  - `frontend/src/components/shared/SearchInput.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/ProductHeader.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/MyProducts.tsx`
+  - `frontend/src/constants/errorMessages.ts`
+  - `CHANGELOG-SEDES.md`
+  - `SEDES-MASTER-PLAN.md`
+- **Description:** the frontend half of the Phase 5 stock matrix is now in the working tree.
+  - **Integration point:** the entrepreneur opens the modal with the new secondary "Editar stock" action in `ProductHeader` on `/dashboard/entrepreneurships/:id/products`. The button is disabled when the entrepreneurship has no simple products (`hasEditableProducts` derived from `allProducts`). `MyProducts` conditionally mounts `StockMatrixModal` only while open (`isStockModalOpen`), so the hook fetches only while the modal is open and tears down cleanly on close. After a successful save, `MyProducts` calls `refreshProducts` via the modal's `onSaved`.
+  - **Data and scope:** `useStockMatrix` calls `getEntrepreneurshipProducts` for the entrepreneurship and keeps only `!is_composed` products. Composed products are excluded because their availability is computed from components; the modal shows a note explaining this and counts them via `composedCount`. `StockMatrixItem` / `StockMatrixPayload` / `StockMatrixResponse` were added to `frontend/src/types/index.ts`, and `getEntrepreneurshipProducts` now accepts an optional `AbortSignal`.
+  - **Per-sede cells:** each simple product renders a `VF` (Valle Frío) and a `GO` (Grano de Oro) cell, each with an AntD `Switch` labeled "Ofrecer" and a numeric stock input. Desktop uses `StockMatrixTable`; mobile uses `StockMatrixCardsMobile`. Both are rendered and CSS-hidden (`hidden md:block` / `md:hidden`). The stock input is disabled when the sede is not offered. Per-cell helper text makes the semantics explicit: offered off shows "No ofrecido", offered on with stock `0` shows "Agotado" (the product stays visible in that sede's catalog). The modal banner explains that stock `0` means sold out but still visible, and that disabling "Ofrecer" deletes the `product_stock` row so the product disappears from that sede.
+  - **State model:** one draft map keyed by product id holds `{ VF: { offered, stock }, GO: { offered, stock } }`, with a cloned baseline snapshot and a dirty diff. Only products whose cells differ from the baseline are submitted, and both sedes are always sent for each submitted product. An empty payload is never sent. The dirty count is capped at `MAX_STOCK_MATRIX_ITEMS = 200`, matching the backend `StockMatrixSchema` cap; over-limit state disables submit and shows a limit message. Stock is clamped to `[MAX_STOCK, 0]` with integer truncation, where `MAX_STOCK = 2147483647` matches the backend int4 `StockCellSchema` bound.
+  - **Fetch and save safety:** the load effect is abortable and race-safe (`AbortController` plus a `cancelled` flag), and resets products, draft, baseline, and composed count at the start of each load. `reload` is a no-op while a save is in flight, and `save` has a re-entrancy guard (`savingRef`) in addition to the disabled submit state. `updateProductStockMatrix` in `productService.ts` sends the payload as JSON (the Axios client appends `/api` to the backend origin).
+  - **Payload contract:** `PUT /api/products/stock/matrix` with JSON `{ entrepreneurship_id, items: [{ product_id, stocks: { VF: { offered, stock }, GO: { offered, stock } } }] }`. Success returns `200 { message: "Stock actualizado correctamente", data: { updated: <number of items> } }`.
+  - **Post-save refresh:** `useProducts` now exposes `allProducts` (unfiltered list) and consolidates loading into a shared `loadProducts`. `fetchProducts` shows the page skeleton and toasts on failure; `refreshProducts` runs without the skeleton and warns on failure, so the page-level skeleton never unmounts the just-saved modal and a refresh failure does not discard the success toast.
+  - **Modal and input support:** `BaseFormModal` gained `2xl`/`3xl` widths, a `submitDisabled` prop, dialog ARIA (`role="dialog"`, `aria-modal`, `aria-labelledby`), focus capture and restore, Escape close, a basic Tab focus trap, and an explicit close label. `SearchInput` gained an optional `onKeyDown`, used to prevent Enter on the search field and on the numeric stock inputs from implicitly submitting the form.
+  - **Error copy:** `errorMessages.ts` gained `products.stockMatrix`, `products.stockMatrixLimit`, and `products.refreshAfterStock`.
+- **Behavior change:** entrepreneurs can now view and edit both sedes' offered/stock state for every simple product from a single modal reached from the products header. Offering a sede upserts its row; un-offering it removes only that sede's row. Stock `0` while offered keeps the product visible as sold out. Only changed products are written, both sedes are always included per written product, and the page list refreshes after a successful save without unmounting the modal.
+- **Status:** working-tree changes only; not staged, committed, or pushed. The backend endpoint exists in local backend commit `958c2ea`; its push to the `Freelance-entrepreneurships-Test` remote is currently blocked by a server-side `commit_refs_rules` rejection, and the original repository is never targeted. No SQL or migrations were applied.
+- **Verification:** `pnpm lint` in `frontend` exited 0. `pnpm exec tsc --noEmit -p tsconfig.app.json` in `frontend` reported the feature files clean, with only 5 pre-existing errors in untouched files (`EntrepreneurshipOverview.tsx:16`, `ProductFilters.tsx:41/52/63`, `UpdatesModal.tsx:60`). Code review after fixes: ready to document, no critical/high functional or security findings. Security audit: no critical/high/medium vulnerabilities; authorization remains backend-enforced, no XSS sinks, and tokens are not exposed. No browser-level manual testing was performed, and no frontend test suite exists.
+- **Residual / still open:**
+  - No frontend automated tests or browser QA.
+  - The dialog focus trap is a basic first/last cycle and does not cover AntD portal content.
+  - The desktop table and mobile cards are both mounted (CSS-hidden), so large lists can render up to roughly twice the controls.
+  - Product image URLs are rendered as supplied by the backend; there is no origin allowlist.
+  - Per-sede low-stock wording remains a backend follow-up.
+  - Phase 5 still has other open items: admin sede filters/payroll, `products.current_stock` removal, and RLS verification.
+
 ### Phase 5 — backend per-sede stock matrix read contract and bulk update endpoint
 
 - **Date:** `2026-11-05`

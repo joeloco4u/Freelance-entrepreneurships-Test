@@ -206,13 +206,30 @@ export interface EntrepreneurshipProduct {
 export interface ProductInput {
   name: string;
   price: number;
-  current_stock: number;
+  current_stock?: number;
   is_active: boolean;
   entrepreneurship_id?: string;
   image: string;
   imageFile?: File | null;
   category_id?: number;
-  stocks?: ProductStocks;
+  stocks: ProductStocks;
+}
+
+export interface StockMatrixItem {
+  product_id: string;
+  stocks: ProductStocks;
+}
+
+export interface StockMatrixPayload {
+  entrepreneurship_id: string;
+  items: StockMatrixItem[];
+}
+
+export interface StockMatrixResponse {
+  message: string;
+  data: {
+    updated: number;
+  };
 }
 
 export interface ComposedProductComponent {
@@ -356,6 +373,12 @@ export interface GlobalSale {
     email: string;
   };
   sale_items: SaleItemDetail[];
+}
+
+export interface SedeBreakdown {
+  VF: number;
+  GO: number;
+  unassigned: number;
 }
 
 export interface RefundPayload {

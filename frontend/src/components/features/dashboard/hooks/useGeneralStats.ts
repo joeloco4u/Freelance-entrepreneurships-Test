@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  isLocationCode,
+  type LocationCode,
+} from "../../../../config/locations";
 import { useAdminData } from "../../../../hooks/useAdminData";
 import { useDashboard } from "../../../../hooks/useDashboard";
 import { useITData } from "../../../../hooks/useITData";
@@ -7,7 +11,11 @@ import {
   getConsumerPurchases,
   getSalesByEntrepreneurship,
 } from "../../../../services/saleService";
-import type { ConsumerSale, EntrepreneurshipSale } from "../../../../types";
+import type {
+  ConsumerSale,
+  EntrepreneurshipSale,
+  SedeBreakdown,
+} from "../../../../types";
 
 export function useGeneralStats() {
   const { user, roles, loading: authLoading } = useDashboard();
@@ -90,12 +98,39 @@ export function useGeneralStats() {
 
   const stats = useMemo(() => {
     // 1. Stats para ADMIN
+    let totalRevenue = 0;
+    let pendingPayroll = 0;
+    const revenueBySede: SedeBreakdown = { VF: 0, GO: 0, unassigned: 0 };
+    const pendingBySede: SedeBreakdown = { VF: 0, GO: 0, unassigned: 0 };
+
+    sales.forEach((sale) => {
+      const normalizedLocation =
+        typeof sale.location_id === "string"
+          ? sale.location_id.trim().toUpperCase()
+          : "";
+      const sede: LocationCode | "unassigned" = isLocationCode(normalizedLocation)
+        ? normalizedLocation
+        : "unassigned";
+
+      totalRevenue += sale.total;
+      revenueBySede[sede] += sale.total;
+
+      if (
+        sale.payment_type !== "immediate" &&
+        !sale.payroll_processed &&
+        !sale.refunded
+      ) {
+        pendingPayroll += sale.total;
+        pendingBySede[sede] += sale.total;
+      }
+    });
+
     const adminStats = {
-      totalRevenue: sales.reduce((acc, s) => acc + s.total, 0),
-      pendingPayroll: sales
-        .filter((s) => !s.payroll_processed && !s.refunded)
-        .reduce((acc, s) => acc + s.total, 0),
+      totalRevenue,
+      pendingPayroll,
       activeEntrepreneurs: entrepreneursSummary.length,
+      revenueBySede,
+      pendingBySede,
     };
 
     // 2. Stats para PROVEEDOR (desde su propio fetch independiente)
