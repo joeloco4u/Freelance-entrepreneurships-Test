@@ -2,6 +2,7 @@ import { Dropdown, type MenuProps } from "antd";
 import { Calendar, DollarSign, MoreVertical, RotateCcw, User } from "lucide-react";
 import type { EntrepreneurshipSale } from "../../../../../types";
 import { formatCurrency } from "../../../../../utils/format";
+import { SedeBadge } from "../../../../shared/SedeBadge";
 import StatusBadge, { PaymentTypeLabel } from "../../../my-purchases/shared/StatusBadge";
 
 interface Props {
@@ -82,8 +83,11 @@ export default function SalesCardsMobile({
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-baseline gap-1">
-                    <span className="text-sm font-bold text-gray-900 truncate uppercase tracking-tight">{sale.users.name}</span>
+                    <span className="text-sm font-bold text-gray-900 truncate uppercase tracking-tight min-w-0">{sale.users.name}</span>
                     <PaymentTypeLabel paymentType={sale.payment_type} paymentMethod={sale.payment_method} />
+                    <div className="shrink-0">
+                      <SedeBadge codes={sale.location_id ? [sale.location_id] : []} />
+                    </div>
                   </div>
                   <p className="text-[10px] text-gray-400 font-mono">#{sale.id.slice(0, 8).toUpperCase()}</p>
                   {sale.note && (

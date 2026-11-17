@@ -30,6 +30,8 @@ export default function MyProducts() {
     setStatusFilter,
     stockFilter,
     setStockFilter,
+    sedeFilter,
+    setSedeFilter,
     formModal,
     deleteModal,
     isSaving,
@@ -85,6 +87,12 @@ export default function MyProducts() {
 
   if (loading) return <ProductTableSkeleton />;
 
+  const isFiltering =
+    !!searchQuery ||
+    statusFilter !== "all" ||
+    stockFilter !== "all" ||
+    sedeFilter !== "ALL";
+
   return (
     <div className="space-y-6 pb-20 md:pb-0">
       <ProductHeader
@@ -102,11 +110,14 @@ export default function MyProducts() {
         onStockChange={setStockFilter}
         sortBy={sortBy}
         onSortChange={setSortBy}
+        sedeFilter={sedeFilter}
+        onSedeChange={setSedeFilter}
       />
 
       {products.length === 0 ? (
         <ProductEmptyState
           searchQuery={searchQuery}
+          isFiltering={isFiltering}
           onAddProduct={() => openFormModal()}
         />
       ) : (
@@ -114,10 +125,12 @@ export default function MyProducts() {
           <ProductTableDesktop
             products={products}
             getActionMenu={getActionMenuItems}
+            sedeFilter={sedeFilter}
           />
           <ProductCardsMobile
             products={products}
             getActionMenu={getActionMenuItems}
+            sedeFilter={sedeFilter}
           />
         </>
       )}

@@ -10,10 +10,10 @@ import WelcomeHeader from "./WelcomeHeader";
 export default function EntrepreneurshipOverview() {
   const { id } = useParams<{ id: string }>();
 
-  const { sales, loading: loadingSales } = useSales(id);
-  const { products, loading: loadingProducts } = useProducts(id);
+  const { allSales, loading: loadingSales } = useSales(id);
+  const { allProducts, loading: loadingProducts } = useProducts(id);
 
-  const stats = useOverviewStats(sales || [], products || []);
+  const stats = useOverviewStats(allSales, allProducts);
 
   if (loadingSales || loadingProducts) return <ProductTableSkeleton />;
   if (!id) return null;
@@ -26,6 +26,8 @@ export default function EntrepreneurshipOverview() {
         revenue={stats.totalRevenue}
         pendingPayrollTotal={stats.pendingPayrollTotal}
         processedPayrollTotal={stats.processedPayrollTotal}
+        revenueBySede={stats.revenueBySede}
+        pendingBySede={stats.pendingBySede}
       />
 
       <InventoryAndTips
@@ -33,6 +35,7 @@ export default function EntrepreneurshipOverview() {
         totalProducts={stats.totalProducts}
         lowStock={stats.lowStockProducts}
         outOfStock={stats.outOfStock}
+        inventoryBySede={stats.inventoryBySede}
       />
     </div>
   );

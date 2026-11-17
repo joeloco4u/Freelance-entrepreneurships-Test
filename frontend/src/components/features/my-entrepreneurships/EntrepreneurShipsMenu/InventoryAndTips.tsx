@@ -1,11 +1,14 @@
 import { AlertCircle, Package, Store, TrendingUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { LOCATIONS, LOCATION_CODES } from "../../../../config/locations";
+import type { SedeInventoryBreakdown } from "../../../../types";
 
 interface Props {
   id: string;
   totalProducts: number;
   lowStock: number;
   outOfStock: number;
+  inventoryBySede: SedeInventoryBreakdown;
 }
 
 export default function InventoryAndTips({
@@ -13,8 +16,12 @@ export default function InventoryAndTips({
   totalProducts,
   lowStock,
   outOfStock,
+  inventoryBySede,
 }: Props) {
   const navigate = useNavigate();
+  const hasLowStock =
+    lowStock > 0 ||
+    LOCATION_CODES.some((location) => inventoryBySede[location].lowStock > 0);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -26,7 +33,7 @@ export default function InventoryAndTips({
           <Package size={20} className="text-gray-400" />
         </div>
         <div className="space-y-6">
-          {lowStock > 0 && (
+          {hasLowStock && (
             <div className="flex items-center justify-between p-4 bg-orange-50 rounded-2xl border border-orange-100">
               <div className="flex items-center gap-3">
                 <AlertCircle className="text-orange-500" size={20} />
@@ -72,6 +79,26 @@ export default function InventoryAndTips({
               <p className="text-[10px] text-gray-500 uppercase font-bold">
                 Sin Stock
               </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+              Por sede
+            </p>
+            <div className="space-y-1.5">
+              {LOCATION_CODES.map((location) => {
+                const inventory = inventoryBySede[location];
+                return (
+                  <p key={location} className="text-xs text-gray-500">
+                    <span className="font-medium text-gray-600">
+                      {LOCATIONS[location].name}:
+                    </span>{" "}
+                    {inventory.lowStock} en stock bajo •{" "}
+                    {inventory.outOfStock} agotado
+                    {inventory.outOfStock === 1 ? "" : "s"}
+                  </p>
+                );
+              })}
             </div>
           </div>
         </div>

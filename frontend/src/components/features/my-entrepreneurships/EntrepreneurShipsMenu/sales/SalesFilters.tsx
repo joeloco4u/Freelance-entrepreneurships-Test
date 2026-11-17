@@ -4,9 +4,11 @@ import {
   STATUS_OPTIONS,
 } from "../../../../../constants/salesFilters";
 import type { DateRange } from "../../../../../types";
+import type { AdminSedeFilter } from "../../../../../config/locations";
 import { DateRangeFilter } from "../../../../shared/DateRangeFilter";
-import FilterSelector from "../../../admin-entrepreneurs/FilterSelector";
+import FilterSelector from "../../../../shared/FilterSelector";
 import SearchInput from "../../../../shared/SearchInput";
+import { SedeFilter } from "../../../../shared/SedeFilter";
 
 import type { ReactNode } from "react";
 
@@ -21,6 +23,8 @@ interface Props {
   onSortChange: (val: string) => void;
   dateRange: DateRange | null;
   onDateRangeChange: (val: DateRange | null) => void;
+  sedeFilter: AdminSedeFilter;
+  onSedeChange: (value: AdminSedeFilter) => void;
   exportButton?: ReactNode;
 }
 
@@ -35,6 +39,8 @@ export default function SalesFilters({
   onSortChange,
   dateRange,
   onDateRangeChange,
+  sedeFilter,
+  onSedeChange,
   exportButton,
 }: Props) {
   const statusLabel =
@@ -60,6 +66,9 @@ export default function SalesFilters({
       />
 
       <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+        <div className="w-full lg:w-44 min-w-0">
+          <SedeFilter value={sedeFilter} onChange={onSedeChange} />
+        </div>
         <div className="w-full lg:w-44 min-w-0">
           <FilterSelector
             label={statusLabel}
@@ -106,7 +115,7 @@ export default function SalesFilters({
 
       {exportButton}
 
-      {(searchQuery || statusFilter !== "all" || paymentMethodFilter !== "all" || sortBy !== "date-desc" || dateRange) && (
+      {(searchQuery || statusFilter !== "all" || paymentMethodFilter !== "all" || sortBy !== "date-desc" || dateRange || sedeFilter !== "ALL") && (
         <button
           type="button"
           onClick={() => {
@@ -115,6 +124,7 @@ export default function SalesFilters({
             onPaymentMethodChange("all");
             onSortChange("date-desc");
             onDateRangeChange(null);
+            onSedeChange("ALL");
           }}
           className="p-2.5 text-gray-400 hover:text-primary rounded-xl cursor-pointer transition-colors"
           title="Limpiar filtros"

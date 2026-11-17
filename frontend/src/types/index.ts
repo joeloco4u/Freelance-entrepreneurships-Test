@@ -313,6 +313,7 @@ export interface EntrepreneurshipSale {
   refunded?: boolean;
   payment_type: PaymentType;
   payment_method?: PaymentMethod | null;
+  location_id?: LocationCode;
   note?: string | null;
   users: {
     id: string;
@@ -381,6 +382,13 @@ export interface SedeBreakdown {
   unassigned: number;
 }
 
+export interface SedeInventoryCount {
+  lowStock: number;
+  outOfStock: number;
+}
+
+export type SedeInventoryBreakdown = Record<LocationCode, SedeInventoryCount>;
+
 export interface RefundPayload {
   item_ids?: number[];
 }
@@ -399,6 +407,7 @@ export interface PublicUser {
   roles: string[];
   departamento: string;
   created_at?: string;
+  is_active?: boolean;
 }
 
 export interface ActiveSessionsResponse {

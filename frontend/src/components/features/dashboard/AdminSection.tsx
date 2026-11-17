@@ -1,6 +1,6 @@
 import { Activity, DollarSign, Landmark, Store } from "lucide-react";
 import type { SedeBreakdown } from "../../../types";
-import { formatCurrency } from "../../../utils/format";
+import { formatCurrency, formatSedeBreakdown } from "../../../utils/format";
 import { SectionHeader } from "./shared/SectionHeader";
 import { StatCard } from "./shared/StatCard";
 
@@ -12,23 +12,6 @@ interface Props {
     revenueBySede: SedeBreakdown;
     pendingBySede: SedeBreakdown;
   };
-}
-
-function formatSedeBreakdown(breakdown: SedeBreakdown): string | null {
-  if (breakdown.VF + breakdown.GO + breakdown.unassigned === 0) {
-    return null;
-  }
-
-  const parts = [
-    `VF: ${formatCurrency(breakdown.VF)}`,
-    `GO: ${formatCurrency(breakdown.GO)}`,
-  ];
-
-  if (breakdown.unassigned > 0) {
-    parts.push(`Sin sede: ${formatCurrency(breakdown.unassigned)}`);
-  }
-
-  return parts.join(" • ");
 }
 
 export default function AdminSection({ stats }: Props) {

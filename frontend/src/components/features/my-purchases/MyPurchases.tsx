@@ -6,7 +6,7 @@ import { formatCurrency } from "../../../utils/format";
 import { MONTHS } from "../../../utils/payrollUtils";
 import { DateRangeFilter } from "../../shared/DateRangeFilter";
 import SearchInput from "../../shared/SearchInput";
-import FilterSelector from "../admin-entrepreneurs/FilterSelector";
+import FilterSelector from "../../shared/FilterSelector";
 import MyPurchasesDesktop from "./MyPurchasesDesktop";
 import MyPurchasesEmpty from "./MyPurchasesEmpty";
 import MyPurchasesMobile from "./MyPurchasesMobile";

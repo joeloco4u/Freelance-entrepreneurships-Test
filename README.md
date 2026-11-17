@@ -31,6 +31,7 @@ Una plataforma robusta diseñada para que emprendedores puedan gestionar sus cat
 - **Autenticación JWT**: Integración con Supabase Auth para la protección de rutas.
 - **Control por Roles (RBAC)**: Diferenciación de permisos entre Administradores y Proveedores.
 - **Validación de Propiedad**: Los proveedores solo tienen permisos de escritura sobre productos vinculados a su propio `entrepreneurship_id`.
+- **Desactivación de Usuarios (Soft Delete)**: Eliminar un usuario realiza una desactivación lógica (`users.is_active = false`) y un baneo en Supabase Auth, preservando el historial de ventas y emprendimientos asociados.
 
 ---
 

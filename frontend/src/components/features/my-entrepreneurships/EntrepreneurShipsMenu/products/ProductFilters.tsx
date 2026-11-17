@@ -4,8 +4,10 @@ import {
   STOCK_OPTIONS,
   STATUS_OPTIONS,
 } from "../../../../../constants/productsFilters";
-import FilterSelector from "../../../admin-entrepreneurs/FilterSelector";
+import type { AdminSedeFilter } from "../../../../../config/locations";
+import FilterSelector from "../../../../shared/FilterSelector";
 import SearchInput from "../../../../shared/SearchInput";
+import { SedeFilter } from "../../../../shared/SedeFilter";
 
 interface Props {
   searchQuery: string;
@@ -16,6 +18,8 @@ interface Props {
   onStockChange: (value: string) => void;
   sortBy: string;
   onSortChange: (value: string) => void;
+  sedeFilter: AdminSedeFilter;
+  onSedeChange: (value: AdminSedeFilter) => void;
 }
 
 export default function ProductFilters(props: Props) {
@@ -38,13 +42,16 @@ export default function ProductFilters(props: Props) {
 
       <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto mt-2 lg:mt-0">
         <div className="w-full lg:w-44 min-w-0">
+          <SedeFilter value={props.sedeFilter} onChange={props.onSedeChange} />
+        </div>
+        <div className="w-full lg:w-44 min-w-0">
           <FilterSelector
             label={statusLabel}
             icon={Filter}
+            onChange={(key) => props.onStatusChange(String(key))}
             items={STATUS_OPTIONS.map((opt) => ({
               key: opt.value,
               label: opt.label,
-              onClick: () => props.onStatusChange(opt.value),
             }))}
           />
         </div>
@@ -52,10 +59,10 @@ export default function ProductFilters(props: Props) {
           <FilterSelector
             label={stockLabel}
             icon={Package}
+            onChange={(key) => props.onStockChange(String(key))}
             items={STOCK_OPTIONS.map((opt) => ({
               key: opt.value,
               label: opt.label,
-              onClick: () => props.onStockChange(opt.value),
             }))}
           />
         </div>
@@ -63,10 +70,10 @@ export default function ProductFilters(props: Props) {
           <FilterSelector
             label={sortLabel}
             icon={ArrowUpDown}
+            onChange={(key) => props.onSortChange(String(key))}
             items={SORT_OPTIONS.map((opt) => ({
               key: opt.value,
               label: opt.label,
-              onClick: () => props.onSortChange(opt.value),
             }))}
           />
         </div>

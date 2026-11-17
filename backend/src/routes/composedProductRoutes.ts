@@ -16,9 +16,14 @@ composedProductRouter.use(authenticate);
 
 composedProductRouter.get(
   "/entrepreneurship/:entrepreneurship_id",
+  authorize("ADMIN", "IT", "PROVEEDOR"),
   getComposedProductsByEntrepreneurship,
 );
-composedProductRouter.get("/:id", getComposedProductById);
+composedProductRouter.get(
+  "/:id",
+  authorize("ADMIN", "IT", "PROVEEDOR"),
+  getComposedProductById,
+);
 composedProductRouter.post(
   "/",
   authorize("PROVEEDOR", "IT"),

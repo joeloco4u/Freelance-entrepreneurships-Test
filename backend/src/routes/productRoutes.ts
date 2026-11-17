@@ -24,9 +24,14 @@ productRouter.use(authenticate);
 productRouter.get("/", authorize("ADMIN", "IT"), getAllProducts);
 productRouter.get(
   "/entrepreneurship/:entrepreneurship_id",
+  authorize("ADMIN", "IT", "PROVEEDOR"),
   getProductsByEntrepreneurship,
 );
-productRouter.get("/:id", getProductById);
+productRouter.get(
+  "/:id",
+  authorize("ADMIN", "IT", "PROVEEDOR"),
+  getProductById,
+);
 productRouter.post(
   "/",
   authorize("PROVEEDOR", "IT"),

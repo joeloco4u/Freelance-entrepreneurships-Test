@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import type { EntrepreneurshipSale } from "../../../../../types";
 import { formatCurrency } from "../../../../../utils/format";
+import { SedeBadge } from "../../../../shared/SedeBadge";
 import StatusBadge, { PaymentTypeLabel } from "../../../my-purchases/shared/StatusBadge";
 
 interface Props {
@@ -122,6 +123,7 @@ export default function SalesTableDesktop({
                       <div className="flex items-baseline gap-1">
                         <span className="text-sm font-bold text-gray-900">{sale.users.name}</span>
                         <PaymentTypeLabel paymentType={sale.payment_type} paymentMethod={sale.payment_method} />
+                        <SedeBadge codes={sale.location_id ? [sale.location_id] : []} />
                       </div>
                       <p className="text-[11px] text-gray-400">{sale.users.email}</p>
                       {sale.note && (

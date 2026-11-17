@@ -13,6 +13,125 @@
 
 ## [Unreleased]
 
+### Provider "Mis Productos" — sede-aware stock column and sede-aware filter/sort
+
+- **Date:** `2026-11-09`
+- **Type:** `feat` (frontend)
+- **Scope:** Provider/Entrepreneur "Mis Productos" multi-location awareness. The stock column (desktop) and stock pills (mobile) now render from the per-sede `product.stocks` matrix instead of the legacy scalar `product.current_stock`, whose list value resolves to the default `VF` because the list request sends no `?sede`. Frontend only; no backend, schema, RLS, or database changes.
+- **Files added:**
+  - `frontend/src/utils/productStock.ts`
+- **Files modified:**
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/ProductTableDesktop.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/ProductCardsMobile.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/MyProducts.tsx`
+  - `frontend/src/hooks/useProducts.ts`
+  - `frontend/src/constants/stock.ts`
+  - `CHANGELOG-SEDES.md`
+- **Description:** the provider product stock display is now sede-aware and no longer limited to the `VF` scalar.
+  - **New helper (`frontend/src/utils/productStock.ts`):** exports the `SedeStockEntry` type (`{ code, stock, isLow }`) and three typed helpers. `getOfferedSedeCodes(product)` returns the `LOCATION_CODES` whose `stocks[code].offered === true`, in `LOCATION_CODES` order. `getSedeStockEntries(product, sedeFilter)` returns `[]` when no `stocks` payload exists, a single entry for a specific offered sede, or one entry per offered sede for `ALL`; each entry carries `isLow: stock < LOW_STOCK_THRESHOLD`. `getEffectiveStock(product, sedeFilter)` returns that sede's stock, the sum of the offered sedes' stock for `ALL`, or a documented legacy fallback to `current_stock` only when `stocks` is absent (used for sort/filter only).
+  - **`MyProducts`:** threads `sedeFilter` into both renderers (`ProductTableDesktop` and `ProductCardsMobile`) so the stock display stays aligned with the toolbar sede filter.
+  - **Specific sede (`VF`/`GO`):** the stock column/card shows only that sede's `stocks[sedeFilter].stock` as `N un.`. Desktop keeps the amber/gray low-stock styling; mobile keeps the existing `Stock: N` pill.
+  - **`ALL`:** renders a breakdown of every sede where the product is offered (`stocks[code].offered === true`), in `LOCATION_CODES` order. Desktop shows `SedeBadge` + `N un.` per sede separated by `|`; mobile shows one pill per sede (`VF: 5 un.` / `GO: 2 un.`). Each value is colored independently using `LOW_STOCK_THRESHOLD` (`< 5` = low).
+  - **Missing `stocks` payload:** renders `—` instead of fabricating a `0`; the render helpers return `[]` for this case, while `getEffectiveStock` retains the legacy `current_stock` fallback for sort/filter only.
+  - **Composed products:** `stocks[code].stock` is the backend-derived availability per sede, so the UI displays it per sede and adds a `title` explaining the value is calculated from the combo's components. `offered` keeps its "listed in that sede" meaning; a combo with `0` derived stock remains listed and shows `0`. No frontend combo computation is introduced.
+  - **`useProducts` consistency fix:** the stock filter and stock sort are now sede-aware. A specific sede uses that sede's stock. `ALL` sort uses the sum of the offered sedes; `ALL` low-stock matches products where any offered sede is below the threshold; `ALL` normal-stock requires every offered sede at or above the threshold and at least one offered sede. `LOW_STOCK_THRESHOLD = 5` was added to `frontend/src/constants/stock.ts` and its comment matches the strict `<` usage.
+  - **Accessibility:** the stock group has one `role="group"` plus a Spanish `aria-label` built from full sede names (`LOCATIONS[code].name`); visible value nodes are `aria-hidden` to avoid duplicate announcements; the `SedeBadge` inside the `ALL` breakdown is decorative; table headers gained `scope="col"`; icon-only row action buttons gained `aria-label="Acciones del producto"`.
+  - **Mobile layout:** the card header row gained `pr-10` so the `SedeBadge` no longer collides with the absolutely positioned action button.
+- **Behavior change:** a provider now sees the real stock for the selected sede, or a per-sede breakdown in `Todas` mode, instead of a single `VF`-derived scalar. The displayed values come from the already-returned `product.stocks` matrix, and the stock filter/sort use the same sede semantics, so the column and the filters agree.
+- **Verification:** ESLint passed on all touched frontend files (`pnpm exec eslint`). No build or `tsc --noEmit` was run, per the project Build Policy. Code review found an initial mobile badge/action-button collision plus minor a11y nits; all were fixed and a focused re-review confirmed no remaining blocking issues. Security audit found no new vulnerabilities: rendering is React-escaped, data is already tenant-scoped/authorized by the API, and no secrets, network calls, or dependencies were added. Informational: a `PROVEEDOR` in `ALL` mode now sees per-sede quantities that were already present in the API payload.
+- **Residual / still open:**
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/hooks/useOverviewStats.ts` still uses `<= 5` and a max-across-sedes aggregation, so the Overview low-stock counts and the `InventoryAndTips` deep link (`stockFilter="low-stock"`) may not match the new `ALL` filter semantics exactly (any-sede `< 5`). This is a pre-existing inconsistency not changed here.
+  - `useOverviewStats` still excludes combos from per-sede inventory counts.
+  - No browser/manual QA and no automated frontend tests were performed.
+  - Working-tree changes only; not staged, committed, or pushed.
+
+### Composed products — multi-location offering, computed availability, and read/write hardening
+
+- **Date:** `2026-11-09`
+- **Type:** `feat` (backend)
+- **Scope:** Composed-product (combo) multi-location support. Combos now receive a `product_stock` row for every sede, reads return per-sede computed availability, and the composed/simple product read and write paths are fixed and hardened. Backend only. A new backfill migration is added but **not applied** to any database.
+- **Files added:**
+  - `backend/src/utils/stocks.ts`
+  - `backend/supabase/migrations/20261109_backfill_composed_product_stock.sql`
+- **Files modified:**
+  - `backend/src/controllers/ComposedProductController.ts`
+  - `backend/src/controllers/ProductController.ts`
+  - `backend/src/routes/productRoutes.ts`
+  - `backend/src/routes/composedProductRoutes.ts`
+  - `CHANGELOG-SEDES.md`
+  - `SEDES-MASTER-PLAN.md`
+- **Description:** combos were effectively VF-only. `createComposedProduct` inserted a single `product_stock` row for `DEFAULT_LOCATION`, and provider reads returned a placeholder `stocks` matrix, so a combo could not appear in, or be sold from, `GO`. The refactor makes offering presence-based in both sedes and computes real availability from component stock at read time.
+  - **Schema fact:** `product_stock` has no `offered` column. The existence of a row is the offering signal; `buildStocks` sets `offered: true` for any recognized row and returns `{ offered: false, stock: 0 }` otherwise. For composed products, the `stock` value on those rows is an opaque placeholder and is never authoritative; availability is derived from component stock.
+  - **Shared helper (`backend/src/utils/stocks.ts`):** adds `buildStocks(rows, stockOverrides?)` plus the `LocationStock`, `ProductStockRow`, and `ProductStocks` types. It initializes both `VF` and `GO`, normalizes each `location_id` with `trim().toUpperCase()` before validating it with `isLocationCode`, ignores unknown or non-string locations, and applies optional per-location `stockOverrides` while keeping `offered: true` from row presence. Both controllers now share this helper instead of duplicating the matrix logic.
+  - **`createComposedProduct`:** validates components before any insert: UUID shape, no duplicate component ids, existence, same entrepreneurship, active status, and no composed/nested components; quantity must be an integer from `1` to `10,000`, and a combo is capped at 50 components. Price is validated as finite, `>= 0`, and `<= 1,000,000,000`. After the product insert, it inserts one `product_stock` row with `stock: 0` for every entry in `LOCATION_CODES` (`VF` and `GO`). If the stock insert or the component insert fails, it cleans up the stock rows and the newly created product before rethrowing.
+  - **`updateComposedProduct`:** rejects `components: []`, parses and validates components before any destructive change, and checks the errors returned by the component delete and restore operations. `image` was removed from the mass-assignment whitelist (it is only set through the upload path), and the response now includes computed `stocks` and `current_stock` for the requested sede.
+  - **`enrichComposedStock`:** computes availability for both sedes (`VF` and `GO`) from component stock in each location. Duplicate component rows are aggregated by summing their quantities; missing, inactive, or nested-composed components make the combo unavailable in every sede. The helper keeps `computed_stock` for the requested `?sede` and adds additive `computed_stocks` for all locations. Computed availability is never persisted; only the placeholder rows are stored.
+  - **Composed reads:** `getComposedProductsByEntrepreneurship` and `getComposedProductById` now return `current_stock` plus `stocks` built with per-location computed overrides, exposing both `VF` and `GO` keys and preserving the `EntrepreneurshipProduct` / `ProductStocks` contract. `components` are preserved on the by-id response. The internal `product_stock`, `computed_stock`, and `computed_stocks` fields are stripped, as is the joined owner relation (`entrepreneurships(owner_id)`). By-id and list reads still enforce `PROVEEDOR` ownership.
+  - **`ProductController`:** the protected read handlers (`getAllProducts`, `getProductsByEntrepreneurship`, `getProductById`) use the computed overrides for `current_stock`/`stocks` and strip `product_stock`, `computed_stock`, `computed_stocks`, and the joined owner relation. `updateProduct` rejects a `current_stock` update on a composed product. `deleteProduct` and `getProductById` now perform the `PROVEEDOR` ownership check, and `getProductById` is covered by the route authorization described below.
+  - **Routes:** `GET /products/entrepreneurship/:id`, `GET /products/:id`, `GET /composed-products/entrepreneurship/:id`, and `GET /composed-products/:id` now require `ADMIN`, `IT`, or `PROVEEDOR`. The by-id handlers additionally enforce `PROVEEDOR` ownership, so a provider cannot read another provider's product or combo.
+  - **`deleteComposedProduct`:** performs an ownership check before deleting, fixing an IDOR that allowed a `PROVEEDOR` to delete another entrepreneurship's combo.
+  - **Migration (`backend/supabase/migrations/20261109_backfill_composed_product_stock.sql`):** idempotently inserts a `stock: 0` row for every composed product in `VF` and `GO` using `on conflict (product_id, location_id) do nothing`, so existing combos become offered in both sedes. The file is **not applied**. Its header warns the operator to first verify the actual type/cast of `product_stock.location_id` (text/varchar versus an enum) and that the `VF`/`GO` rows exist when an FK to `locations(code)` is present.
+- **Behavior change:** a combo now appears in both `VF` and `GO` because an offering row exists for each sede, and its displayed availability in each sede is computed from the stock of its components in that sede. Combo writes no longer create a VF-only offering, and simple/composed reads expose the same per-sede `stocks` contract. A combo with insufficient components in a sede remains visible there as `Agotado`; it is not hidden.
+- **Verification:** `npx tsc --noEmit -p tsconfig.json` passes. `pnpm lint` passes with 7 pre-existing warnings in unrelated files. No build was run per the project Build Policy. No migration was applied and no database changes were made.
+- **Residual / still open:**
+  - The backfill migration has not been applied. Existing combos remain VF-only until it runs, so deploy ordering matters: apply the migration before relying on `GO` combo offering.
+  - Because offering is presence-based, every combo becomes offered in both sedes. A combo that cannot be built in `GO` shows as `Agotado` there rather than being hidden, which is consistent with the locked visibility rule and should be expected.
+  - Swapping a combo's components remains non-transactional. The controller validates first and restores the previous components on insert failure, but that restore is best-effort.
+  - The frontend `useOverviewStats` still excludes combos from per-sede inventory counts.
+  - `process_location_checkout` remains unversioned in the repository.
+  - The pre-existing `user_metadata.roles` authorization issue is out of scope here.
+  - The controller diffs include Biome tab-formatting churn in addition to the functional changes.
+
+### Provider Dashboard — per-sede filters, badges, and overview breakdowns
+
+- **Date:** `2026-11-09`
+- **Type:** `feat` (frontend)
+- **Scope:** Provider/Entrepreneur Dashboard multi-location awareness across the Overview, Products, and Sales views. Adds subtle `VF`/`GO` filters and badges and per-sede overview breakdowns. Frontend only; no backend, schema, RLS, or database changes.
+- **Files added:**
+  - `frontend/src/components/shared/SedeFilter.tsx`
+  - `frontend/src/components/shared/FilterSelector.tsx` (moved from `frontend/src/components/features/admin-entrepreneurs/`)
+- **Files deleted:**
+  - `frontend/src/components/features/admin-entrepreneurs/FilterSelector.tsx` (moved to `components/shared/`)
+- **Files modified:**
+  - `frontend/src/types/index.ts`
+  - `frontend/src/utils/format.ts`
+  - `frontend/src/components/shared/SedeBadge.tsx`
+  - `frontend/src/components/features/dashboard/AdminSection.tsx`
+  - `frontend/src/components/features/admin-consumers/ConsumersFilter.tsx`
+  - `frontend/src/components/features/admin-entrepreneurs/EntrepreneursFilters.tsx`
+  - `frontend/src/components/features/my-purchases/MyPurchases.tsx`
+  - `frontend/src/hooks/useProducts.ts`
+  - `frontend/src/hooks/useSales.ts`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/EntrepreneurshipOverview.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/StatsGrid.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/InventoryAndTips.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/hooks/useOverviewStats.ts`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/MyProducts.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/ProductFilters.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/ProductTableDesktop.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/ProductCardsMobile.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/products/ProductEmptyState.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/sales/MySales.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/sales/SalesFilters.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/sales/SalesTableDesktop.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/sales/SalesCardMobile.tsx`
+  - `frontend/src/components/features/my-entrepreneurships/EntrepreneurShipsMenu/sales/SalesEmptyState.tsx`
+  - `SEDES-MASTER-PLAN.md`
+  - `CHANGELOG-SEDES.md`
+- **Description:** the provider dashboard now exposes sede context without changing the underlying API contract.
+  - **Products (`.../EntrepreneurShipsMenu/products/`):** `ProductFilters` renders the new `SedeFilter` (`Todas` / `VF` / `GO`) in the toolbar, and `useProducts` keeps only products whose `stocks?.[sedeFilter]?.offered === true` when a specific sede is selected. `ProductTableDesktop` and `ProductCardsMobile` render a `SedeBadge` next to the product name, derived from the `LOCATION_CODES` whose `stocks[code].offered` is `true`. `MyProducts` includes `sedeFilter !== "ALL"` in `isFiltering`, so `ProductEmptyState` distinguishes "no results with the current filters" from an empty catalog and only offers the "Crear mi primer producto" action when nothing is filtered.
+  - **Sales (`.../EntrepreneurShipsMenu/sales/`):** `SalesFilters` renders the new `SedeFilter` in the toolbar, and its reset button also clears the sede back to `ALL`. `useSales` keeps `sale.location_id === sedeFilter` when a specific sede is selected, and `MySales` includes the sede in the empty-state `isFiltering` expression. `SalesTableDesktop` and `SalesCardMobile` render a `SedeBadge` next to the customer name from `sale.location_id`. The sales summary `filteredTotalRevenue` now sums only non-refunded `sale_items.subtotal` values and coerces each subtotal with `Number(item.subtotal ?? 0)`, so refunded items no longer inflate the displayed revenue.
+  - **Overview (`.../EntrepreneurShipsMenu/`):** `StatsGrid` was refactored onto the dashboard-scoped `features/dashboard/shared/StatCard` and now passes a `secondary` line to "Ingresos Totales" (from `revenueBySede`) and "Pendiente de Nómina" (from `pendingBySede`), formatted as `VF: $X • GO: $Y` by `formatSedeBreakdown` (with `Sin sede: $Z` appended only when the unassigned bucket is non-zero). `useOverviewStats` aggregates entrepreneurship-scoped `sale_items.subtotal` instead of the sale header `total`, excludes refunded items, and treats a fully refunded sale as `0`; payroll metrics (pending total, processed total, and pending count) exclude immediate-payment sales. `revenueBySede` and `pendingBySede` normalize `sale.location_id` with `trim().toUpperCase()` and fall back to an `unassigned` bucket, never coercing missing or unknown locations to `VF`. `inventoryBySede` is computed strictly from offered `product.stocks[location]` cells: `1` to `5` counts as low stock and `0` as out of stock. Global low/out totals use the maximum offered stock across sedes, so a product still available in another sede is not reported as globally out of stock; composed products, or payloads without a `stocks` matrix, fall back to `current_stock`. `InventoryAndTips` renders a "Por sede" breakdown and shows the low-stock alert when any sede has low stock, including GO-only issues. `EntrepreneurshipOverview` passes the raw `allSales` and `allProducts` to the hook so overview metrics are not reduced by the Products or Sales toolbar filters.
+  - **Types (`frontend/src/types/index.ts`):** `EntrepreneurshipSale` gains an optional `location_id?: LocationCode`; `SedeInventoryCount` and `SedeInventoryBreakdown` were added for the per-sede inventory counters. `SedeBreakdown` is reused by both stat cards.
+  - **Shared components and layering:** the new `frontend/src/components/shared/SedeFilter.tsx` wraps `FilterSelector` with `SEDE_FILTER_OPTIONS` (`Todas` / `VF` / `GO`) and an `AdminSedeFilter` value/onChange contract. `FilterSelector` was moved from `features/admin-entrepreneurs/` to `components/shared/` to fix the shared/feature layering, and every import was updated (`ConsumersFilter`, `EntrepreneursFilters`, `MyPurchases`, `ProductFilters`, `SalesFilters`, and `SedeFilter`). `formatSedeBreakdown` was extracted to `frontend/src/utils/format.ts` and is now reused by `AdminSection`. `SedeBadge` accessibility was improved: the container uses `role="group"` with an aria-label listing the sede names, each badge keeps a `title` with the full location name, the inner codes are `aria-hidden`, and the empty state renders a `—` with `role="img"` and `aria-label="Sin sede"`.
+- **Verification:** `pnpm lint` passes. `npx tsc --noEmit -p tsconfig.app.json` reports only the known pre-existing `UpdatesModal.tsx(60,13)` `variant` error; this change adds no new type errors. No backend changes were made.
+- **Residual / still open:**
+  - Working-tree changes only; not staged or committed.
+  - Pre-existing backend note (not introduced here): `GET /products/entrepreneurship/:id` still lacks a role gate; the owner check applies only to `PROVEEDOR`.
+  - Composed products have no own `product_stock` rows, so they are excluded from the per-sede inventory counts and fall back to `current_stock` for the global counts.
+  - `FilterSelector.selectedKey` remains declared but unused by these consumers (pre-existing behavior).
+  - No automated tests or browser QA were performed for these dashboard views.
+
 ### Admin Dashboard — per-sede revenue breakdown on stat cards
 
 - **Date:** `2026-11-06`

@@ -30,6 +30,7 @@ export async function getAllUsers(_req: Request, res: Response) {
   const { data, error } = await supabaseAdmin
     .from("users")
     .select("*")
+    .eq("is_active", true)
     .order("name", { ascending: true });
   if (error) {
     console.error("[UserController] Error al obtener usuarios:", error.message);
@@ -44,6 +45,7 @@ export async function getPublicConsumers(_req: Request, res: Response) {
       .from("users")
       .select("id, email, name, departamento")
       .contains("roles", ["CONSUMIDOR"])
+      .eq("is_active", true)
       .order("name", { ascending: true });
 
     if (error) throw error;
@@ -177,21 +179,115 @@ export async function deleteUser(req: Request, res: Response) {
   }
 
   try {
-    // Ahora TypeScript sabe que id es un string porque validamos antes
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
+    const { data: user, error: userLookupError } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("id", id)
+      .maybeSingle();
 
-    if (error) {
-      return respondWithError(res, error, "deleteUser", {
-        status: 400,
-        fallback: "No se pudo eliminar el usuario. Intenta de nuevo más tarde.",
+    if (userLookupError) {
+      return respondWithError(res, userLookupError, "deleteUser.lookupUser", {
+        fallback: "No se pudo verificar el usuario. Intenta de nuevo más tarde.",
       });
     }
 
-    res.status(200).json({ message: "Usuario eliminado correctamente" });
+    if (!user) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const { data: authUser, error: authLookupError } =
+      await supabaseAdmin.auth.admin.getUserById(id);
+
+    const authAccountMissing =
+      authLookupError?.status === 404 ||
+      (!authLookupError && !authUser?.user);
+
+    if (authLookupError && !authAccountMissing) {
+      // No se pudo confirmar el estado en Auth: no se toca la base de datos para
+      // no dejar una cuenta oculta pero todavía capaz de iniciar sesión.
+      logError("deleteUser.authLookup", authLookupError);
+      return res.status(500).json({
+        error:
+          "No se pudo verificar la cuenta de autenticación. Intenta de nuevo más tarde.",
+      });
+    }
+
+    if (authAccountMissing) {
+      // Sin cuenta en Auth no hay nada que banear; se desactiva solo el registro
+      // en la base de datos para que desaparezca de los listados.
+      const { error: offlineError } = await supabaseAdmin
+        .from("users")
+        .update({ is_active: false })
+        .eq("id", id)
+        .select("id")
+        .single();
+
+      if (offlineError) {
+        return respondWithError(res, offlineError, "deleteUser.softDelete", {
+          fallback: "No se pudo desactivar el usuario. Intenta de nuevo más tarde.",
+        });
+      }
+
+      return res.status(200).json({
+        message: "Usuario desactivado correctamente",
+        warning:
+          "La cuenta de autenticación no existe; solo se desactivó el registro en la base de datos.",
+      });
+    }
+
+    const wasAlreadyBanned = Boolean(
+      authUser.user?.banned_until &&
+        new Date(authUser.user.banned_until).getTime() > Date.now(),
+    );
+
+    // Banear primero: aunque el update de la base falle, la cuenta queda sin
+    // acceso. El ban bloquea nuevos logins y refrescos de sesión, pero no
+    // revoca los access tokens ya emitidos.
+    const { error: banError } = await supabaseAdmin.auth.admin.updateUserById(
+      id,
+      { ban_duration: "87600h" }, // 10 años
+    );
+
+    if (banError) {
+      logError("deleteUser.ban", banError);
+      return res.status(500).json({
+        error:
+          "No se pudo bloquear el acceso del usuario. Intenta de nuevo más tarde.",
+      });
+    }
+
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update({ is_active: false })
+      .eq("id", id)
+      .select("id")
+      .single();
+
+    if (error) {
+      // Compensación solo si el ban lo aplicamos nosotros: si la cuenta ya
+      // estaba baneada antes, desbanearla borraría un bloqueo legítimo.
+      if (!wasAlreadyBanned) {
+        const { error: rollbackError } =
+          await supabaseAdmin.auth.admin.updateUserById(id, {
+            ban_duration: "none",
+          });
+        if (rollbackError) {
+          logError("deleteUser.rollbackBan", rollbackError);
+        }
+      }
+
+      return respondWithError(res, error, "deleteUser", {
+        messages: { PGRST116: "Usuario no encontrado" },
+        fallback:
+          "No se pudo desactivar el usuario. Intenta de nuevo más tarde.",
+      });
+    }
+
+    res.status(200).json({ message: "Usuario desactivado correctamente" });
   } catch (error) {
     logError("deleteUser", error);
     return res.status(500).json({
-      error: "No se pudo eliminar el usuario del sistema",
+      error: "No se pudo desactivar el usuario del sistema",
     });
   }
 }

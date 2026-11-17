@@ -13,7 +13,7 @@ export default function SalesEmptyState({ isFiltering }: Props) {
       <h3 className="text-lg font-bold text-gray-900 mb-1">Sin ventas</h3>
       <p className="text-sm text-gray-500 max-w-xs leading-relaxed">
         {isFiltering
-          ? "No encontramos resultados para tu búsqueda actual."
+          ? "No encontramos resultados con los filtros actuales."
           : "Aún no has vendido ningún producto."}
       </p>
     </div>

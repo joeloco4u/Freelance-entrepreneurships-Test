@@ -77,6 +77,7 @@ export interface User {
 	role: UserRole[];
 	email: string;
 	is_approved: boolean;
+	is_active?: boolean;
 }
 
 // --- Esquema para Registro de Consumo (Tablet) ---

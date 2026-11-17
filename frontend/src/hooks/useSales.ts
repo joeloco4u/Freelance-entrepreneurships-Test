@@ -6,6 +6,7 @@ import {
 import type { DateRange, EntrepreneurshipSale } from "../types";
 import { getErrorMessage } from "../utils/errorMessage";
 import { ERROR_MESSAGES } from "../constants/errorMessages";
+import type { AdminSedeFilter } from "../config/locations";
 
 export function useSales(entrepreneurshipId?: string) {
   const [sales, setSales] = useState<EntrepreneurshipSale[]>([]);
@@ -17,6 +18,7 @@ export function useSales(entrepreneurshipId?: string) {
   const [statusFilter, setStatusFilter] = useState("all"); // all, processed, pending
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<"all" | "credit" | "efectivo" | "binance" | "pago_movil">("all");
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [sedeFilter, setSedeFilter] = useState<AdminSedeFilter>("ALL");
 
   // 1. Carga de datos desde la API
   useEffect(() => {
@@ -175,7 +177,12 @@ export function useSales(entrepreneurshipId?: string) {
       }
     }
 
-    // --- E. Ordenamiento ---
+    // --- E. Filtro por Sede ---
+    if (sedeFilter !== "ALL") {
+      result = result.filter((sale) => sale.location_id === sedeFilter);
+    }
+
+    // --- F. Ordenamiento ---
     result = result.toSorted((a, b) => {
       switch (sortBy) {
         case "date-desc":
@@ -196,7 +203,7 @@ export function useSales(entrepreneurshipId?: string) {
     });
 
     return result;
-  }, [sales, searchQuery, sortBy, statusFilter, paymentMethodFilter, dateRange]);
+  }, [sales, searchQuery, sortBy, statusFilter, paymentMethodFilter, dateRange, sedeFilter]);
 
   return {
     // Datos
@@ -216,6 +223,8 @@ export function useSales(entrepreneurshipId?: string) {
     setPaymentMethodFilter,
     dateRange,
     setDateRange,
+    sedeFilter,
+    setSedeFilter,
 
     // Acciones
     markItemsRefunded,

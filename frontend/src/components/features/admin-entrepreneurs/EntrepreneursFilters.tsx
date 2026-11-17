@@ -4,7 +4,7 @@ import type { DateRange } from "../../../types";
 import { MONTHS } from "../../../utils/payrollUtils";
 import { DateRangeFilter } from "../../shared/DateRangeFilter";
 import SearchInput from "../../shared/SearchInput";
-import FilterSelector from "./FilterSelector";
+import FilterSelector from "../../shared/FilterSelector";
 
 interface Props {
   view: "summary" | "detailed";

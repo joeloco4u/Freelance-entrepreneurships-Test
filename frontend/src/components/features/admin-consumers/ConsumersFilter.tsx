@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { DateRange } from "../../../types";
 import { MONTHS } from "../../../utils/payrollUtils";
 import { DateRangeFilter } from "../../shared/DateRangeFilter";
-import FilterSelector from "../admin-entrepreneurs/FilterSelector";
+import FilterSelector from "../../shared/FilterSelector";
 import SearchInput from "../../shared/SearchInput";
 
 interface Props {

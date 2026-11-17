@@ -19,6 +19,12 @@ import type {
 } from "../types";
 import { getErrorMessage } from "../utils/errorMessage";
 import { ERROR_MESSAGES } from "../constants/errorMessages";
+import { LOW_STOCK_THRESHOLD } from "../constants/stock";
+import type { AdminSedeFilter } from "../config/locations";
+import {
+  getEffectiveStock,
+  getOfferedSedeCodes,
+} from "../utils/productStock";
 
 function isComposedInput(
   data: ProductInput | ComposedProductInput,
@@ -34,6 +40,7 @@ export function useProducts(entrepreneurshipId?: string) {
   const [sortBy, setSortBy] = useState("name-asc");
   const [statusFilter, setStatusFilter] = useState("all");
   const [stockFilter, setStockFilter] = useState("all");
+  const [sedeFilter, setSedeFilter] = useState<AdminSedeFilter>("ALL");
 
   const [formModal, setFormModal] = useState<{
     isOpen: boolean;
@@ -226,10 +233,33 @@ export function useProducts(entrepreneurshipId?: string) {
       result = result.filter((p) => p.is_active === isActive);
     }
 
+    if (sedeFilter !== "ALL") {
+      result = result.filter((p) => p.stocks?.[sedeFilter]?.offered === true);
+    }
+
     if (stockFilter === "low-stock") {
-      result = result.filter((p) => p.current_stock < 5);
+      result = result.filter((p) =>
+        sedeFilter === "ALL"
+          ? getOfferedSedeCodes(p).some(
+              (code) =>
+                (p.stocks?.[code]?.stock ?? 0) < LOW_STOCK_THRESHOLD,
+            )
+          : getEffectiveStock(p, sedeFilter) < LOW_STOCK_THRESHOLD,
+      );
     } else if (stockFilter === "normal-stock") {
-      result = result.filter((p) => p.current_stock >= 5);
+      result = result.filter((p) => {
+        if (sedeFilter !== "ALL") {
+          return getEffectiveStock(p, sedeFilter) >= LOW_STOCK_THRESHOLD;
+        }
+        const offeredCodes = getOfferedSedeCodes(p);
+        return (
+          offeredCodes.length > 0 &&
+          offeredCodes.every(
+            (code) =>
+              (p.stocks?.[code]?.stock ?? 0) >= LOW_STOCK_THRESHOLD,
+          )
+        );
+      });
     }
 
     result = result.toSorted((a, b) => {
@@ -243,16 +273,20 @@ export function useProducts(entrepreneurshipId?: string) {
         case "price-desc":
           return b.price - a.price;
         case "stock-asc":
-          return a.current_stock - b.current_stock;
+          return (
+            getEffectiveStock(a, sedeFilter) - getEffectiveStock(b, sedeFilter)
+          );
         case "stock-desc":
-          return b.current_stock - a.current_stock;
+          return (
+            getEffectiveStock(b, sedeFilter) - getEffectiveStock(a, sedeFilter)
+          );
         default:
           return 0;
       }
     });
 
     return result;
-  }, [products, searchQuery, sortBy, statusFilter, stockFilter]);
+  }, [products, searchQuery, sortBy, statusFilter, stockFilter, sedeFilter]);
 
   return {
     products: filteredProducts,
@@ -274,6 +308,8 @@ export function useProducts(entrepreneurshipId?: string) {
     setStatusFilter,
     stockFilter,
     setStockFilter,
+    sedeFilter,
+    setSedeFilter,
     saveProduct,
     confirmDelete,
     fetchProducts,

@@ -35,6 +35,8 @@ export default function MySales() {
     setPaymentMethodFilter,
     dateRange,
     setDateRange,
+    sedeFilter,
+    setSedeFilter,
     markItemsRefunded,
     markItemsProcessed,
     refetch,
@@ -210,7 +212,11 @@ export default function MySales() {
     () =>
       sales.reduce(
         (acc, s) =>
-          acc + s.sale_items.reduce((sum, item) => sum + item.subtotal, 0),
+          acc +
+          s.sale_items.reduce(
+            (sum, item) => sum + (item.refunded ? 0 : Number(item.subtotal ?? 0)),
+            0,
+          ),
         0,
       ),
     [sales],
@@ -236,6 +242,8 @@ export default function MySales() {
         onSortChange={setSortBy}
         dateRange={dateRange}
         onDateRangeChange={setDateRange}
+        sedeFilter={sedeFilter}
+        onSedeChange={setSedeFilter}
         exportButton={
           <button
             type="button"
@@ -259,7 +267,7 @@ export default function MySales() {
 
       {sales.length === 0 ? (
         <SalesEmptyState
-          isFiltering={!!searchQuery || statusFilter !== "all" || paymentMethodFilter !== "all" || !!dateRange}
+          isFiltering={!!searchQuery || statusFilter !== "all" || paymentMethodFilter !== "all" || !!dateRange || sedeFilter !== "ALL"}
         />
       ) : (
         <>
