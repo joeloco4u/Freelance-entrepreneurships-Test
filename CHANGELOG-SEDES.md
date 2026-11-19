@@ -13,6 +13,46 @@
 
 ## [Unreleased]
 
+### Legacy merge: deactivation lockout, sale notes, deactivated-user admin view, checkout polish
+
+- **Date:** `2026-11-19`
+- **Type:** `feat` + `fix`
+- **Scope:** Ports the remaining legacy hotfix-branch work into the multi-location (Sedes) architecture: four commits, no schema, RLS, or migration changes, no changes to `product_stock`, `location_id`, `useSede`, `enrichComposedStock`, or the `process_location_checkout` RPC flow.
+- **Files added:** none
+- **Files modified:**
+  - `backend/src/middleware/auth.ts`
+  - `backend/src/controllers/AuthController.ts`
+  - `backend/src/controllers/UserController.ts`
+  - `backend/src/controllers/SaleController.ts`
+  - `backend/src/schemas/slackTemplates.ts`
+  - `backend/src/schemas/emailTemplates.ts`
+  - `frontend/src/constants/errorMessages.ts`
+  - `frontend/src/hooks/useSystemUsers.ts`
+  - `frontend/src/components/features/system-users/SystemUsers.tsx`
+  - `frontend/src/components/features/system-users/SystemUsersDesktop.tsx`
+  - `frontend/src/components/features/system-users/SystemUsersMobile.tsx`
+  - `frontend/src/components/features/system-users/SystemUsersSkeleton.tsx`
+  - `frontend/src/components/features/system-users/shared/ActionButtons.tsx`
+  - `frontend/src/components/features/catalog/CheckoutModal.tsx`
+  - `frontend/src/components/features/my-purchases/MyPurchasesDesktop.tsx`
+  - `frontend/src/components/features/my-purchases/TableSkeleton.tsx`
+- **Files deleted:** none
+- **Description:**
+  - **Deactivation lockout (backend).** `authenticate` now reads `users.is_active` after validating the JWT and returns `403` when the value is exactly `false`, so a soft-deleted account is blocked even while it still holds a valid, unexpired access token. `Login` performs the same check and, when the account is inactive, revokes the session it just minted via `auth.admin.signOut` before returning `403`; the session is also revoked if the profile lookup itself errors. `deleteUser` now rejects self-deactivation with `400`, comparing UUIDs case-insensitively.
+  - **Missing-profile handling (intentional deviation from the legacy patch).** The legacy code treated a missing `public.users` row as deactivation. The auth-to-`public.users` sync is maintained by an unversioned database trigger, so equating "no row" with "deactivated" risked locking out legitimate accounts (including IT admins) if that trigger were absent or lagging. Both handlers therefore block only on `is_active === false` and fail open with a `logError` entry (`auth.profileMissing` / `auth.login.profileMissing`) when the row is missing. This preserves the previous behavior for unprovisioned accounts while still closing the deactivation gap. Verifying and versioning that trigger remains a follow-up.
+  - **Sale notes in notifications (backend).** The sale `note` is now propagated to all five notifications: consumer Slack and email, entrepreneur Slack and email, and the IT webhook. `getSaleById` and the post-RPC select in `createSale` return `note`; every template call receives `sale.note` re-read from the database rather than the request body. `slackTemplates` gains `escapeSlackText` (`&`, `<`, `>` in that order) and `formatSlackNote` (trim, code-point-safe truncation, escaped-length cap) and appends a conditional note section to the three sale templates. `emailTemplates` gains an optional `note` parameter and an escaped, conditional note block in the two sale templates.
+  - **Deactivated users in the admin panel (backend + frontend).** `getAllUsers` no longer filters on `is_active`, so IT/ADMIN see deactivated accounts with their status; `getPublicConsumers` keeps its `is_active = true` filter so deactivated users never appear in kiosk checkout. `SystemUsersDesktop` gains an `Estado` column plus row dimming, `SystemUsersMobile` gains a badge and dimming and hides the delete action, `ActionButtons` accepts an `isActive` prop, and `SystemUsersSkeleton` gains the matching cell. Confirmation copy, toast/console text, and `ERROR_MESSAGES.users.delete` now say "desactivar" instead of "eliminar".
+  - **Mobile checkout and purchases skeleton (frontend).** The checkout modal backdrop is raised to `z-[60]` and its panel uses `max-h-[92dvh]`; the loading and success states become scroll regions (`flex-1 overflow-y-auto min-h-0`) so they are no longer clipped on short viewports; the footer gains safe-area bottom padding (`pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-4`). `MyPurchasesDesktop` now wraps its `TableSkeleton` in a real `<table><tbody>`, and `TableSkeleton` renders six cells to match the six loaded columns, removing the invalid table markup and the column reflow on load.
+- **Behavior change:** a deactivated user is now blocked at login and on every authenticated request, including with a pre-existing token; deactivated users are visible to IT/ADMIN but hidden from consumer selection; sale notes appear in Slack and email notifications.
+- **Verification:**
+  - P0 (auth lockout): code review PASS and security audit PASS after one remediation. The initial `!profile -> 403` behavior was rejected by both reviewers as an availability hazard and replaced with the fail-open-on-missing-row behavior described above. `revokeMintedSession` was additionally wrapped in `try/catch` after review noted a thrown `signOut` could turn the `403` into a `500`.
+  - P2 (sale notes): code review PASS WITH NITS; security audit "safe to ship", no Critical/High/Medium. Confirmed mention/link injection is neutralised by escaping `&` before `<`/`>`, email bodies escape the note before inserting `<br>`, and the note length is bounded by `SaleRequestSchema` (`max(500)`).
+  - P1 (admin view): code review PASS WITH NITS; verified 5 header cells match 5 body cells and 5 skeleton cells, `getPublicConsumers` still filters, and both `users.map` blocks are balanced.
+  - P3 (checkout/skeleton): code review PASS WITH NITS; Tailwind arbitrary values verified against the installed Tailwind v4 build, `md:pb-4` confirmed to win at `md+`, and no z-index conflicts found. The skeleton column mismatch flagged in review was fixed before the commit.
+  - Not run: `pnpm build`, `tsc --noEmit`, `pnpm lint`, and ESLint. The Biome binary cannot spawn in the current environment (`spawnSync ... biome.exe UNKNOWN`, errno -4094).
+  - Not verified on a database: the FK delete actions and the auth-to-`public.users` sync trigger; both remain manual checks on the Test project.
+- **Known follow-ups (not part of this change):** no reactivation path exists (the edit form does not send `is_active`, and the Auth ban is never lifted); the IT dashboard "Usuarios Totales" metric now counts deactivated accounts because it derives from the unfiltered list; the safe-area footer is inert until `viewport-fit=cover` is added to the viewport meta; sale notes from the public checkout are not URL-stripped, so bare links can still render as clickable in notifications; roles are still read from user-writable `user_metadata`.
+
 ### Security: ownership validation and TOCTOU-safe deletes on all DELETE routes
 
 - **Date:** `2026-11-17`
