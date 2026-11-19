@@ -24,6 +24,8 @@
 --   drop table if exists public.product_stock;
 --   alter table public.entrepreneurships drop column if exists description;
 --   delete from public.locations where code in ('VF','GO');
+--   drop policy if exists locations_read on public.locations;
+--   alter table public.locations disable row level security;
 --   drop table if exists public.locations;
 --   alter table public.sale_items enable trigger trigger_reduce_stock;
 -- =============================================================================
@@ -43,6 +45,18 @@ insert into public.locations (code, name) values
   ('VF', 'Valle Frío'),
   ('GO', 'Grano de Oro')
 on conflict (code) do nothing;
+-- The reference table is read-only for clients. Both product_stock.location_id
+-- and sales.location_id are ON UPDATE CASCADE, so without RLS a single PATCH on
+-- locations.code would re-attribute historical sales and stock. Service role
+-- bypasses RLS, so the backend and the RPC are unaffected.
+alter table public.locations enable row level security;
+drop policy if exists locations_read on public.locations;
+create policy locations_read
+  on public.locations
+  for select
+  to anon, authenticated
+  using (true);
+revoke insert, update, delete on public.locations from anon, authenticated;
 
 -- -----------------------------------------------------------------------------
 -- 2. public.product_stock
