@@ -178,24 +178,78 @@ export async function updateEntrepreneurship(req: Request, res: Response) {
 
 // [IT] Eliminar un emprendimiento
 export async function deleteEntrepreneurship(req: Request, res: Response) {
-  const { id } = req.params;
+	const { id } = req.params;
+	const requestingUser = req.user;
 
-  if (!id || typeof id !== "string") {
-    return res
-      .status(400)
-      .json({ error: "ID de emprendimiento inválido o ausente" });
-  }
+	if (!id || typeof id !== "string") {
+		return res
+			.status(400)
+			.json({ error: "ID de emprendimiento inválido o ausente" });
+	}
 
-  try {
-    const { error } = await supabaseAdmin
-      .from("entrepreneurships")
-      .delete()
-      .eq("id", id);
+	if (!requestingUser?.id) {
+		return res.status(401).json({ error: "No autorizado" });
+	}
 
-    if (error)
-      return respondWithError(res, error, "deleteEntrepreneurship", DELETE_OPTIONS);
-    res.status(200).json({ message: "Emprendimiento eliminado correctamente" });
-  } catch (error) {
-    respondWithError(res, error, "deleteEntrepreneurship", DELETE_OPTIONS);
-  }
+	try {
+		const { data: entrepreneurship, error: fetchError } = await supabaseAdmin
+			.from("entrepreneurships")
+			.select("id, owner_id")
+			.eq("id", id)
+			.maybeSingle();
+
+		if (fetchError)
+			return respondWithError(
+				res,
+				fetchError,
+				"deleteEntrepreneurship",
+				DELETE_OPTIONS,
+			);
+
+		if (!entrepreneurship) {
+			return res.status(404).json({ error: "Emprendimiento no encontrado" });
+		}
+
+		const rawRoles = requestingUser.user_metadata?.roles;
+		const roles: string[] = Array.isArray(rawRoles) ? rawRoles : [];
+		const canManageAny = roles.includes("IT");
+
+		if (!canManageAny && entrepreneurship.owner_id !== requestingUser.id) {
+			return res.status(403).json({
+				error: "No tienes permiso para eliminar este emprendimiento",
+			});
+		}
+
+		const deleteQuery = supabaseAdmin
+			.from("entrepreneurships")
+			.delete()
+			.eq("id", id);
+		const scopedQuery = canManageAny
+			? deleteQuery
+			: deleteQuery.eq("owner_id", requestingUser.id);
+		const { data: deleted, error } = await scopedQuery.select("id");
+
+		if (error)
+			return respondWithError(
+				res,
+				error,
+				"deleteEntrepreneurship",
+				DELETE_OPTIONS,
+			);
+
+		if (!deleted || deleted.length === 0) {
+			return res.status(404).json({ error: "Emprendimiento no encontrado" });
+		}
+
+		return res
+			.status(200)
+			.json({ message: "Emprendimiento eliminado correctamente" });
+	} catch (error) {
+		return respondWithError(
+			res,
+			error,
+			"deleteEntrepreneurship",
+			DELETE_OPTIONS,
+		);
+	}
 }

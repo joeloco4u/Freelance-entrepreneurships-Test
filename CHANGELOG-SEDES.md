@@ -13,6 +13,34 @@
 
 ## [Unreleased]
 
+### Security: ownership validation and TOCTOU-safe deletes on all DELETE routes
+
+- **Date:** `2026-11-17`
+- **Type:** `fix`
+- **Scope:** Backend only. Ports the hardened DELETE handlers from the legacy reference codebase into the multi-location (Sedes) architecture. No schema, RLS, migration, frontend, `product_stock`, `location_id`, or `enrichComposedStock` changes.
+- **Files added:** none
+- **Files modified:**
+  - `backend/src/controllers/EntrepreneurshipController.ts` (`deleteEntrepreneurship`)
+  - `backend/src/controllers/ProductController.ts` (`deleteProduct`)
+  - `backend/src/controllers/ComposedProductController.ts` (`deleteComposedProduct`)
+- **Description:** the three DELETE handlers now enforce authorization and verify the deletion server-side instead of issuing a blind delete by id.
+  - **401 guard:** each handler returns `401 { "No autorizado" }` when `req.user?.id` is absent (defense-in-depth; the routers already run `authenticate`).
+  - **`.maybeSingle()` fetch:** the target row is fetched with `.maybeSingle()` instead of `.single()`, so a missing row is a normal "no rows" result rather than a `PGRST116` error. Fetch failures and "not found" are now handled separately.
+  - **Error/404 separation:** a genuine database error from the ownership lookup is reported through `respondWithError` (sanitized message + server-side log) instead of being silently converted into a `404`.
+  - **Relation normalization:** the `entrepreneurships(owner_id)` embed is normalized as array-or-object before reading `owner_id`, removing the previous assumption that it is always an object. A missing owner relation returns `404`.
+  - **Entrepreneurship authorization fix (IDOR):** `deleteEntrepreneurship` previously deleted by id with no ownership check, so any `PROVEEDOR` could delete any entrepreneurship. It now allows `IT` to delete any row; every other caller must be the `owner_id`.
+  - **Scoped, TOCTOU-safe delete:** the delete is scoped by the tenant column and the response is verified with `.select("id")`. Products and combos add `.eq("entrepreneurship_id", ...)`; non-`IT` entrepreneurship deletes add `.eq("owner_id", ...)`; combos additionally keep `.eq("is_composed", true)` on both the fetch and the delete. Zero deleted rows now returns `404` instead of a false `200`. No `location_id` / `sede` predicate is used: `products` has no location column and `product_stock` rows are children of the product.
+  - **Preserved behavior:** `DELETE_OPTIONS` remains unchanged, so a foreign-key violation (`23503`, e.g. a product referenced by `sale_items`) still returns the friendly Spanish `409` message. Success responses remain `{ "message": "..." }` and errors remain `{ "error": "..." }`.
+  - **Behavior change:** a `PROVEEDOR` deleting another provider's product, combo, or entrepreneurship now receives `403`; deleting a non-existent or already-deleted id now returns `404` (previously `200` for the entrepreneurship endpoint).
+- **Verification:**
+  - Code review: PASS WITH NITS; the diff contains only the three DELETE functions (20 hunks, no other handler touched), and a `tsc --noEmit` run exited 0.
+  - Security audit: the horizontal `PROVEEDOR` IDOR is closed for `deleteProduct` and `deleteComposedProduct`, and for `deleteEntrepreneurship` for genuine providers. Residual role-trust issue noted below is pre-existing and out of scope.
+  - Post-review change: the initial `IT`/`ADMIN` bypass in the two product handlers was removed after review flagged it as amplifying the pre-existing user-writable-roles issue; both handlers are now owner-only, which is behavior-neutral for every caller the current routes admit.
+  - Not verified: `pnpm lint` / `biome format` could not run in the current environment (`spawnSync ... biome.exe UNKNOWN`, errno -4094 -- a local binary/path issue).
+  - Not verified here: FK delete actions (`23503` vs cascade) should be confirmed on the Test project via `pg_constraint.confdeltype`.
+- **Deny-by-default ownership:** `deleteProduct` and `deleteComposedProduct` require the caller to own the row, unconditionally. The previous check ran only when the caller held `PROVEEDOR`, which is a denylist that would have failed open if either route were ever widened; it is gone. No `IT`/`ADMIN` bypass is granted on these two handlers: the product and combo DELETE routes admit `PROVEEDOR` only, and roles are read from user-writable `user_metadata`, so a privileged bypass would be self-assignable. Ownership stays unconditional until roles move to a server-controlled source. Role values are also coerced with `Array.isArray` before any `includes` check, so a non-array `roles` payload can never match by substring.
+- **Known follow-ups (not part of this change):** roles are still read from user-writable `user_metadata` (pre-existing issue; a caller could self-assign `IT` and use the `deleteEntrepreneurship` `IT` branch, which its route does admit). Tracked separately, together with the FK delete-action verification on the Test project.
+
 ### Provider "Mis Productos" — sede-aware stock column and sede-aware filter/sort
 
 - **Date:** `2026-11-09`

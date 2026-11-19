@@ -604,41 +604,65 @@ export async function updateComposedProduct(req: Request, res: Response) {
 // Eliminar un producto compuesto (cascade elimina los componentes)
 export async function deleteComposedProduct(req: Request, res: Response) {
 	const { id } = req.params;
+	const requestingUser = req.user;
 
 	if (!id || typeof id !== "string") {
 		return res.status(400).json({ error: "ID de producto inválido" });
 	}
 
+	if (!requestingUser?.id) {
+		return res.status(401).json({ error: "No autorizado" });
+	}
+
 	try {
 		const { data: product, error: fetchError } = await supabaseAdmin
 			.from("products")
-			.select("*, entrepreneurships(owner_id)")
+			.select("id, entrepreneurship_id, is_composed, entrepreneurships(owner_id)")
 			.eq("id", id)
 			.eq("is_composed", true)
-			.single();
+			.maybeSingle();
 
-		if (fetchError || !product) {
+		if (fetchError)
+			return respondWithError(
+				res,
+				fetchError,
+				"deleteComposedProduct",
+				DELETE_OPTIONS,
+			);
+
+		if (!product) {
 			return res
 				.status(404)
 				.json({ error: "Producto compuesto no encontrado" });
 		}
 
-		const requestingUser = req.user;
-		const roles: string[] = requestingUser?.user_metadata?.roles ?? [];
-		if (
-			roles.includes("PROVEEDOR") &&
-			product.entrepreneurships.owner_id !== requestingUser?.id
-		) {
+		const ownerRel = Array.isArray(product.entrepreneurships)
+			? product.entrepreneurships[0]
+			: product.entrepreneurships;
+
+		if (!ownerRel) {
+			return res
+				.status(404)
+				.json({ error: "Producto compuesto no encontrado" });
+		}
+
+		// The route admits PROVEEDOR only, so ownership is always required.
+		// No IT/ADMIN bypass: roles live in user-writable user_metadata, so a
+		// privileged bypass would be self-assignable until roles move to a
+		// server-controlled source such as app_metadata.
+		if (ownerRel.owner_id !== requestingUser.id) {
 			return res
 				.status(403)
 				.json({ error: "No tienes permiso para eliminar este producto" });
 		}
 
-		const { error } = await supabaseAdmin
+		const { data: deleted, error } = await supabaseAdmin
 			.from("products")
 			.delete()
 			.eq("id", id)
-			.eq("is_composed", true);
+			.eq("is_composed", true)
+			.eq("entrepreneurship_id", product.entrepreneurship_id)
+			.select("id");
 
 		if (error)
 			return respondWithError(
@@ -647,7 +671,14 @@ export async function deleteComposedProduct(req: Request, res: Response) {
 				"deleteComposedProduct",
 				DELETE_OPTIONS,
 			);
-		res
+
+		if (!deleted || deleted.length === 0) {
+			return res
+				.status(404)
+				.json({ error: "Producto compuesto no encontrado" });
+		}
+
+		return res
 			.status(200)
 			.json({ message: "Producto compuesto eliminado correctamente" });
 	} catch (error) {
