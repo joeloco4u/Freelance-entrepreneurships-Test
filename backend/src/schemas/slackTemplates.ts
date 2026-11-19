@@ -63,6 +63,32 @@ function paymentTypeLabel(
   return "💳 Crédito (nómina)";
 }
 
+const SLACK_NOTE_MAX_LENGTH = 2800;
+const SLACK_NOTE_ESCAPED_MAX_LENGTH = 2900;
+
+function escapeSlackText(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function formatSlackNote(note?: string | null): string {
+  const trimmed = note?.trim();
+  if (!trimmed) return "";
+
+  const codePoints = Array.from(trimmed);
+  const rawText =
+    codePoints.length > SLACK_NOTE_MAX_LENGTH
+      ? `${codePoints.slice(0, SLACK_NOTE_MAX_LENGTH).join("")}...`
+      : trimmed;
+
+  const escaped = escapeSlackText(rawText);
+  return escaped.length > SLACK_NOTE_ESCAPED_MAX_LENGTH
+    ? escaped.slice(0, SLACK_NOTE_ESCAPED_MAX_LENGTH)
+    : escaped;
+}
+
 export const consumerPurchaseTemplate = (
   name: string,
   orderId: string = "",
@@ -70,6 +96,7 @@ export const consumerPurchaseTemplate = (
   items: any[],
   paymentType?: string,
   paymentMethod?: string,
+  note?: string | null,
 ): SlackMessageContent => {
   const idParts = orderId.split("-");
 
@@ -82,6 +109,8 @@ export const consumerPurchaseTemplate = (
     firstPart && typeof firstPart === "string"
       ? firstPart.toUpperCase()
       : "N/A";
+
+  const noteText = formatSlackNote(note);
 
   return [
     {
@@ -125,6 +154,17 @@ export const consumerPurchaseTemplate = (
         },
       ],
     },
+    ...(noteText
+      ? [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*Nota:*\n${noteText}`,
+            },
+          } as const,
+        ]
+      : []),
   ];
 };
 
@@ -138,6 +178,7 @@ export const entrepreneurSaleTemplate = (
   customerName: string,
   paymentType?: string,
   paymentMethod?: string,
+  note?: string | null,
 ): SlackMessageContent => {
   const subtotal = products.reduce((acc, p) => acc + p.price * p.quantity, 0);
 
@@ -155,6 +196,7 @@ export const entrepreneurSaleTemplate = (
 
   const isImmediate = paymentType === "immediate";
   const paymentLabel = paymentTypeLabel(paymentType, paymentMethod);
+  const noteText = formatSlackNote(note);
 
   return [
     {
@@ -207,6 +249,17 @@ export const entrepreneurSaleTemplate = (
         },
       ],
     },
+    ...(noteText
+      ? [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*Nota del cliente:*\n${noteText}`,
+            },
+          } as const,
+        ]
+      : []),
   ];
 };
 
@@ -282,6 +335,7 @@ export const saleNotificationTemplate = (
   sellers: SaleNotificationSeller[],
   paymentType?: string,
   paymentMethod?: string,
+  note?: string | null,
 ): SlackMessageContent => {
   const idParts = orderId.split("-");
   const firstPart = idParts[0];
@@ -311,6 +365,7 @@ export const saleNotificationTemplate = (
       : "_Sin emprendedores_";
 
   const paymentLabel = paymentTypeLabel(paymentType, paymentMethod);
+  const noteText = formatSlackNote(note);
 
   return [
     {
@@ -351,6 +406,17 @@ export const saleNotificationTemplate = (
         text: `*Emprendedores involucrados:*\n${sellersList}`,
       },
     },
+    ...(noteText
+      ? [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*Nota del cliente:*\n${noteText}`,
+            },
+          } as const,
+        ]
+      : []),
   ];
 };
 

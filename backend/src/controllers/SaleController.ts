@@ -257,6 +257,7 @@ export async function getSaleById(req: Request, res: Response) {
       total,
       payroll_processed,
       refunded,
+      note,
       location_id,
       users!consumer_id(
         id, 
@@ -522,6 +523,7 @@ export async function createSale(req: Request, res: Response) {
         total,
         payment_type,
         payment_method,
+        note,
         location_id,
         consumer:consumer_id (
           id,
@@ -563,6 +565,7 @@ export async function createSale(req: Request, res: Response) {
           processedItems,
           normalizedPaymentType,
           templatePaymentMethod,
+          sale.note,
         );
 
         const consumerHtml = consumerPurchaseEmailHtml(
@@ -572,6 +575,7 @@ export async function createSale(req: Request, res: Response) {
           processedItems,
           normalizedPaymentType,
           templatePaymentMethod,
+          sale.note,
         );
 
         const notificationResult = await sendUserNotification(
@@ -631,6 +635,7 @@ export async function createSale(req: Request, res: Response) {
           consumerData?.name,
           normalizedPaymentType,
           templatePaymentMethod,
+          sale.note,
         );
 
         const sellerHtml = entrepreneurSaleEmailHtml(
@@ -640,6 +645,7 @@ export async function createSale(req: Request, res: Response) {
           consumerData?.name,
           normalizedPaymentType,
           templatePaymentMethod,
+          sale.note,
         );
 
         const notificationResult = await sendUserNotification(
@@ -748,6 +754,7 @@ export async function createSale(req: Request, res: Response) {
           sellersForNotification,
           normalizedPaymentType,
           templatePaymentMethod,
+          sale.note,
         );
 
         await sendSlackWebhookNotification(webhookUrl, webhookBlocks);
