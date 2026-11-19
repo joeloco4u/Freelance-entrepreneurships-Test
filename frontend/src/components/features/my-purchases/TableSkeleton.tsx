@@ -19,6 +19,9 @@ const TableSkeleton = () => (
         <td className="px-6 py-5 text-center">
           <Skeleton width={80} height={24} borderRadius={6} />
         </td>
+        <td className="px-6 py-5 text-center">
+          <Skeleton width={80} height={24} borderRadius={6} />
+        </td>
       </tr>
     ))}
   </>

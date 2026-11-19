@@ -51,8 +51,8 @@ export default function CheckoutModal(props: Props) {
   if (!props.isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-40 flex items-end md:items-center justify-center p-0 md:p-4 transition-all">
-      <div className="bg-white rounded-t-2xl md:rounded-2xl w-full max-w-115 overflow-hidden shadow-xl max-h-[92vh] flex flex-col animate-in slide-in-from-bottom md:zoom-in">
+    <div className="fixed inset-0 bg-black/50 z-[60] flex items-end md:items-center justify-center p-0 md:p-4 transition-all">
+      <div className="bg-white rounded-t-2xl md:rounded-2xl w-full max-w-115 overflow-hidden shadow-xl max-h-[92dvh] flex flex-col animate-in slide-in-from-bottom md:zoom-in">
         {/* Header */}
         <div className="bg-primary px-6 py-5 flex items-start justify-between">
           <div>
@@ -78,7 +78,7 @@ export default function CheckoutModal(props: Props) {
 
         {/* 1. Loading State */}
         {props.status === "loading" && (
-          <div className="flex flex-col items-center justify-center py-16 gap-4">
+          <div className="flex-1 overflow-y-auto min-h-0 flex flex-col items-center justify-center py-16 gap-4">
             <Loader2 size={36} className="animate-spin text-primary" />
             <p className="text-sm text-gray-400">Registrando tu compra...</p>
           </div>
@@ -86,7 +86,7 @@ export default function CheckoutModal(props: Props) {
 
         {/* 2. Success State */}
         {props.status === "success" && (
-          <div className="flex flex-col items-center justify-center py-12 px-6 text-center gap-4">
+          <div className="flex-1 overflow-y-auto min-h-0 flex flex-col items-center justify-center py-12 px-6 text-center gap-4">
             <CheckCircle2
               size={64}
               className="text-primary/20"
@@ -336,7 +336,7 @@ export default function CheckoutModal(props: Props) {
               )}
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-100 flex gap-3">
+            <div className="px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-4 border-t border-gray-100 flex gap-3">
               <button
                 type="button"
                 onClick={props.onClose}

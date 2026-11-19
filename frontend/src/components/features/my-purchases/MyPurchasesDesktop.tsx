@@ -23,7 +23,11 @@ export default function MyPurchasesDesktop({
   if (loading)
     return (
       <div className="hidden md:block bg-white rounded-2xl p-4">
-        <TableSkeleton />
+        <table className="w-full text-left border-collapse">
+          <tbody>
+            <TableSkeleton />
+          </tbody>
+        </table>
       </div>
     );
 
