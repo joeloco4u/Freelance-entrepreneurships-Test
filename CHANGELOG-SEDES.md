@@ -13,6 +13,38 @@
 
 ## [Unreleased]
 
+### Database hardening: `locations` RLS, backfill migration renumbering, and repository hygiene
+
+- **Date:** `2026-11-19`
+- **Type:** `fix` + `chore` (database)
+- **Scope:** Repository and migration hardening only. Adds a read-only RLS posture for the `locations` reference table, removes a duplicate migration version that could break `supabase db push`, fixes an invalid prop on the software-updates modal, and removes build/link artifacts from version control. No backend request path, no RPC body, and no application behavior changes. The migrations are **not applied** to any database.
+- **Files added:** none
+- **Files modified:**
+  - `backend/supabase/migrations/20261119_sedes_full_baseline.sql`
+  - `backend/supabase/migrations/20261120_backfill_composed_product_stock.sql` (renamed from `20261109_backfill_composed_product_stock.sql`; contents unchanged)
+  - `frontend/src/components/shared/UpdatesModal.tsx`
+  - `.gitignore`
+  - `CHANGELOG-SEDES.md`
+  - `SEDES-MASTER-PLAN.md`
+- **Files deleted:**
+  - `supabase/.temp/linked-project.json`
+  - `sedes_backup_schema.sql`
+  - `package-lock.json`
+- **Description:** four independent cleanups landed together.
+  - **`locations` RLS in the baseline.** A new block was inserted immediately after the `locations` seed and inside the existing `begin;`/`commit;` transaction of `backend/supabase/migrations/20261119_sedes_full_baseline.sql` (now lines ~48-59). It runs `alter table public.locations enable row level security;`, then `drop policy if exists locations_read on public.locations;` followed by `create policy locations_read ... for select to anon, authenticated using (true);`, then `revoke insert, update, delete on public.locations from anon, authenticated;`. Rationale: `product_stock.location_id` and `sales.location_id` are both `ON UPDATE CASCADE`, so without RLS a single `PATCH` on `public.locations` with the public anon key could rewrite the `code` of a sede and silently re-attribute every historical sale and stock row. `service_role` bypasses RLS, so the backend and `public.process_location_checkout` are unaffected. Two rollback comment lines (`drop policy if exists locations_read`, `alter table public.locations disable row level security`) were added to the header rollback block, before the `drop table if exists public.locations` step.
+  - **Migration rename (`20261109` -> `20261120`).** `backend/supabase/migrations/20261109_backfill_composed_product_stock.sql` was renamed to `backend/supabase/migrations/20261120_backfill_composed_product_stock.sql` with the SQL unchanged. It now sorts **after** `20261119_sedes_full_baseline.sql`, which already creates `product_stock` and `locations` and performs the same composed-product backfill, so the file is a guaranteed no-op on a fresh database and on a legacy database upgraded by the baseline. The rename also removes a duplicate migration-version collision: `20261109_add_user_soft_delete.sql` already occupied version `20261109`, which can break `supabase db push`.
+  - **`UpdatesModal` type fix.** `frontend/src/components/shared/UpdatesModal.tsx` passed an unsupported `variant="popover"` prop to `SoftwareUpdatesWidget`, whose `Props` are exactly `updates`, `loading`, `unreadCount`, and `onMarkAsRead`. The prop was removed; this was a real `TS2322` in the committed tree. No visual or behavioral change: the widget never consumed the prop.
+  - **Repository cleanup.** Three files that were accidentally committed in `75ae711` were removed: `supabase/.temp/linked-project.json` (Supabase CLI link state holding the project ref and organization id), the empty `sedes_backup_schema.sql`, and `package-lock.json` (a stray npm lockfile in a pnpm monorepo; `pnpm-lock.yaml` is authoritative). `.gitignore` now ignores `supabase/.temp/` so the CLI link state cannot be committed again.
+- **Behavior change:** clients holding the public anon key can now only `select` from `public.locations`; `insert`/`update`/`delete` are revoked, so a sede code can no longer be rewritten from the browser. The backend and the checkout RPC are unchanged because they use `service_role`. The composed-product backfill now executes after the baseline and is a no-op, and the migration set no longer contains two files with version `20261109`.
+- **Verification:**
+  - The migrations were **not applied** to any database (Test or production) from this workspace. `20261119_sedes_full_baseline.sql` and `20261120_backfill_composed_product_stock.sql` remain repository artifacts only.
+  - No build, `tsc --noEmit`, `pnpm lint`, or ESLint result is recorded for this change; no browser QA was performed.
+  - No live-database check was performed for the new policy, the default privileges, or the migration bookkeeping described in the operator follow-ups below.
+- **Operator follow-ups (required before relying on this change):**
+  - **Migration bookkeeping.** Verify `supabase_migrations.schema_migrations` for versions `20261109` and `20261120`. The rename means a database that already recorded the backfill under `20261109` would try to re-run it under `20261120`; the SQL is idempotent (`on conflict (product_id, location_id) do nothing`) but the bookkeeping should be reconciled. If the backfill was previously applied under `20261109`, run `supabase migration repair --status applied 20261120` so the history matches the file now in the repository.
+  - **Default privileges on `locations`.** The `revoke insert, update, delete` covers DML only. Supabase default privileges may still grant `TRUNCATE`, `REFERENCES`, and `TRIGGER` to `anon`/`authenticated`; those grants cannot expose row data through PostgREST but are wider than necessary. Tightening to `revoke all on public.locations from anon, authenticated` plus `grant select on public.locations to anon, authenticated` was evaluated and deliberately left as an optional hardening follow-up, to keep the change minimal and avoid disturbing the seeded reference table.
+  - **Live RLS verification.** RLS on the legacy `sales`, `products`, `sale_items`, and `users` tables is still unverified in a live database and remains pending. Verifying the new `locations` policy and the `product_stock` posture (RLS enabled, no policies, by design) on the target project is also pending.
+
 ### Legacy merge: deactivation lockout, sale notes, deactivated-user admin view, checkout polish
 
 - **Date:** `2026-11-19`
@@ -120,7 +152,7 @@
 - **Scope:** Composed-product (combo) multi-location support. Combos now receive a `product_stock` row for every sede, reads return per-sede computed availability, and the composed/simple product read and write paths are fixed and hardened. Backend only. A new backfill migration is added but **not applied** to any database.
 - **Files added:**
   - `backend/src/utils/stocks.ts`
-  - `backend/supabase/migrations/20261109_backfill_composed_product_stock.sql`
+  - `backend/supabase/migrations/20261120_backfill_composed_product_stock.sql`
 - **Files modified:**
   - `backend/src/controllers/ComposedProductController.ts`
   - `backend/src/controllers/ProductController.ts`
@@ -138,7 +170,7 @@
   - **`ProductController`:** the protected read handlers (`getAllProducts`, `getProductsByEntrepreneurship`, `getProductById`) use the computed overrides for `current_stock`/`stocks` and strip `product_stock`, `computed_stock`, `computed_stocks`, and the joined owner relation. `updateProduct` rejects a `current_stock` update on a composed product. `deleteProduct` and `getProductById` now perform the `PROVEEDOR` ownership check, and `getProductById` is covered by the route authorization described below.
   - **Routes:** `GET /products/entrepreneurship/:id`, `GET /products/:id`, `GET /composed-products/entrepreneurship/:id`, and `GET /composed-products/:id` now require `ADMIN`, `IT`, or `PROVEEDOR`. The by-id handlers additionally enforce `PROVEEDOR` ownership, so a provider cannot read another provider's product or combo.
   - **`deleteComposedProduct`:** performs an ownership check before deleting, fixing an IDOR that allowed a `PROVEEDOR` to delete another entrepreneurship's combo.
-  - **Migration (`backend/supabase/migrations/20261109_backfill_composed_product_stock.sql`):** idempotently inserts a `stock: 0` row for every composed product in `VF` and `GO` using `on conflict (product_id, location_id) do nothing`, so existing combos become offered in both sedes. The file is **not applied**. Its header warns the operator to first verify the actual type/cast of `product_stock.location_id` (text/varchar versus an enum) and that the `VF`/`GO` rows exist when an FK to `locations(code)` is present.
+  - **Migration (`backend/supabase/migrations/20261120_backfill_composed_product_stock.sql`):** idempotently inserts a `stock: 0` row for every composed product in `VF` and `GO` using `on conflict (product_id, location_id) do nothing`, so existing combos become offered in both sedes. The file was renamed from `20261109_...` on `2026-11-19` so it sorts after `20261119_sedes_full_baseline.sql`, which already performs the same backfill, making this migration a no-op on a database upgraded by the baseline (see the `2026-11-19` entry). The file is **not applied**. Its header warns the operator to first verify the actual type/cast of `product_stock.location_id` (text/varchar versus an enum) and that the `VF`/`GO` rows exist when an FK to `locations(code)` is present.
 - **Behavior change:** a combo now appears in both `VF` and `GO` because an offering row exists for each sede, and its displayed availability in each sede is computed from the stock of its components in that sede. Combo writes no longer create a VF-only offering, and simple/composed reads expose the same per-sede `stocks` contract. A combo with insufficient components in a sede remains visible there as `Agotado`; it is not hidden.
 - **Verification:** `npx tsc --noEmit -p tsconfig.json` passes. `pnpm lint` passes with 7 pre-existing warnings in unrelated files. No build was run per the project Build Policy. No migration was applied and no database changes were made.
 - **Residual / still open:**
