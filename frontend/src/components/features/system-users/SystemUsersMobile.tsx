@@ -33,25 +33,29 @@ export default function SystemUsersMobile({
 
   return (
     <div className="md:hidden grid grid-cols-1 gap-10 px-4 pt-6">
-      {users.map((user) => (
+      {users.map((user) => {
+        const isActive = user.is_active !== false;
+        return (
         <div key={user.id} className="relative group">
           {/* BOTÓN ELIMINAR FLOTANTE */}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(user.id);
-            }}
-            className="absolute -top-4 -right-2 z-30 w-12 h-12 bg-red-500 text-white rounded-full flex items-center justify-center shadow-xl shadow-red-200 active:scale-90 transition-transform border-[6px] border-white cursor-pointer"
-          >
-            <Trash2 size={20} />
-          </button>
+          {isActive && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(user.id);
+              }}
+              className="absolute -top-4 -right-2 z-30 w-12 h-12 bg-red-500 text-white rounded-full flex items-center justify-center shadow-xl shadow-red-200 active:scale-90 transition-transform border-[6px] border-white cursor-pointer"
+            >
+              <Trash2 size={20} />
+            </button>
+          )}
 
           {/* CARD PRINCIPAL - Actúa como botón de edición */}
           <button
             type="button"
             onClick={() => onEdit(user)}
-            className="bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm flex flex-col gap-6 active:bg-gray-50 active:scale-[0.97] transition-all text-left w-full cursor-pointer"
+            className={`bg-white border border-gray-100 rounded-[2.5rem] p-8 shadow-sm flex flex-col gap-6 active:bg-gray-50 active:scale-[0.97] transition-all text-left w-full cursor-pointer ${isActive ? "" : "opacity-60"}`}
           >
             {/* AVATAR E INFO BÁSICA */}
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
@@ -66,6 +70,11 @@ export default function SystemUsersMobile({
                 <p className="text-sm text-gray-400 break-all leading-tight opacity-80">
                   {user.email}
                 </p>
+                  <span
+                    className={`inline-block mt-2 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${isActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-400"}`}
+                  >
+                    {isActive ? "Activo" : "Inactivo"}
+                  </span>
               </div>
             </div>
 
@@ -93,7 +102,8 @@ export default function SystemUsersMobile({
             </div>
           </button>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

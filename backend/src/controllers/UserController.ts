@@ -30,7 +30,6 @@ export async function getAllUsers(_req: Request, res: Response) {
   const { data, error } = await supabaseAdmin
     .from("users")
     .select("*")
-    .eq("is_active", true)
     .order("name", { ascending: true });
   if (error) {
     console.error("[UserController] Error al obtener usuarios:", error.message);

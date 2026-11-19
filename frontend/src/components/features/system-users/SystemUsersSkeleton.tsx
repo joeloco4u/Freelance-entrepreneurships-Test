@@ -24,6 +24,10 @@ const SystemUsersSkeleton = () => (
         <Skeleton width={50} height={20} borderRadius={6} />
       </div>
     </td>
+    <td className="px-6 py-4">
+      {/* Status badge */}
+      <Skeleton width={64} height={20} borderRadius={6} />
+    </td>
     <td className="px-6 py-4 text-right">
       {/* Actions buttons */}
       <div className="flex justify-end gap-2">

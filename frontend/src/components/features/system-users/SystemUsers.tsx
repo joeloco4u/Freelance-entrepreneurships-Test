@@ -65,8 +65,9 @@ export default function SystemUsers() {
         isLoading={deleteModal.isLoading}
         onClose={deleteModal.onClose}
         onConfirm={deleteModal.onConfirm}
-        title="Eliminar Usuario"
-        message="¿Estás seguro de que deseas eliminar este usuario?"
+        title="Desactivar Usuario"
+        message="¿Estás seguro de que deseas desactivar este usuario? No podrá iniciar sesión ni aparecerá en las listas públicas."
+        confirmText="Desactivar"
         type="danger"
       />
     </div>

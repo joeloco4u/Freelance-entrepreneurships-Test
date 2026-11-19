@@ -33,6 +33,9 @@ export default function SystemUsersDesktop({
             <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
               Roles
             </th>
+            <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              Estado
+            </th>
             <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider text-right">
               Acciones
             </th>
@@ -41,10 +44,12 @@ export default function SystemUsersDesktop({
         <tbody className="divide-y divide-gray-50">
           {isLoading
             ? skeletonRows.map((id) => <SystemUsersSkeleton key={id} />)
-            : users.map((user) => (
+            : users.map((user) => {
+                const isActive = user.is_active !== false;
+                return (
                 <tr
                   key={user.id}
-                  className="hover:bg-gray-50/50 transition-all group"
+                  className={`hover:bg-gray-50/50 transition-all group ${!isActive ? "opacity-60 bg-gray-50/40" : ""}`}
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -71,14 +76,23 @@ export default function SystemUsersDesktop({
                       ))}
                     </div>
                   </td>
+                  <td className="px-6 py-4">
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${isActive ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-400"}`}
+                    >
+                      {isActive ? "ACTIVO" : "INACTIVO"}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 text-right">
                     <ActionButtons
                       onEdit={() => onEdit(user)}
                       onDelete={() => onDelete(user.id)}
+                      isActive={isActive}
                     />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
         </tbody>
       </table>
     </div>

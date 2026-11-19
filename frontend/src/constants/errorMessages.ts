@@ -46,8 +46,7 @@ export const ERROR_MESSAGES = {
   users: {
     load: "No se pudieron cargar los usuarios. Verifica tu conexión e intenta de nuevo.",
     save: "Error al guardar el usuario. Verifica los datos e intenta de nuevo.",
-    delete:
-      "No se pudo eliminar el usuario. Verifica que no tenga datos asociados.",
+    delete: "No se pudo desactivar el usuario. Intenta de nuevo más tarde.",
     request: "Error al procesar la solicitud. Intenta de nuevo más tarde.",
   },
   sales: {

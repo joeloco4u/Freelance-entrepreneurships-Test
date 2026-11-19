@@ -78,11 +78,11 @@ export function useSystemUsers() {
       await deleteUser(userToDelete);
       await fetchUsers();
       setIsDeleteModalOpen(false);
-      toast.success("Usuario eliminado exitosamente");
+      toast.success("Usuario desactivado exitosamente");
     } catch (error) {
       const errorMessage = getErrorMessage(error, ERROR_MESSAGES.users.delete);
       toast.error(errorMessage);
-      console.error("Error al eliminar usuario", error);
+      console.error("Error al desactivar usuario", error);
     } finally {
       setIsDeleting(false);
       setUserToDelete(null);
