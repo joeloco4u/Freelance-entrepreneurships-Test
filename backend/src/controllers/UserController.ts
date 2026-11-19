@@ -178,6 +178,12 @@ export async function deleteUser(req: Request, res: Response) {
     return res.status(400).json({ error: "ID de usuario inválido o ausente" });
   }
 
+  if (req.user?.id?.toLowerCase() === id.toLowerCase()) {
+    return res
+      .status(400)
+      .json({ error: "No puedes desactivar tu propia cuenta" });
+  }
+
   try {
     const { data: user, error: userLookupError } = await supabaseAdmin
       .from("users")

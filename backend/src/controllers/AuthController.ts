@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import z from "zod";
 import { env } from "../config/env.js";
 import { supabaseAdmin } from "../db.js";
+import { logError } from "../utils/logger.js";
 import { respondWithError } from "../utils/errors.js";
 import {
 	ACCOUNT_INVITE_SUBJECT,
@@ -320,6 +321,57 @@ export async function Login(req: Request, res: Response) {
 					? "Credenciales inválidas"
 					: "Error al iniciar sesión",
 			});
+		}
+
+		if (!data.user) {
+			return res.status(401).json({ error: "Credenciales inválidas" });
+		}
+
+		const userId = data.user.id;
+
+		// Revoke the session just minted by signInWithPassword so it cannot be reused.
+		const revokeMintedSession = async () => {
+			if (!data.session?.access_token) return;
+
+			try {
+				const { error: signOutError } =
+					await supabaseAdmin.auth.admin.signOut(data.session.access_token);
+
+				if (signOutError) {
+					logError("auth.login.signOut", signOutError, { user_id: userId });
+				}
+			} catch (signOutError) {
+				logError("auth.login.signOut", signOutError, { user_id: userId });
+			}
+		};
+
+		const { data: profile, error: profileError } = await supabaseAdmin
+			.from("users")
+			.select("is_active")
+			.eq("id", userId)
+			.maybeSingle();
+
+		if (profileError) {
+			logError("auth.login.isActive", profileError, { user_id: userId });
+			await revokeMintedSession();
+			return res.status(500).json({ error: "Error al iniciar sesión" });
+		}
+
+		if (profile?.is_active === false) {
+			await revokeMintedSession();
+			return res.status(403).json({
+				error: "Tu cuenta está desactivada. Contacta al administrador.",
+			});
+		}
+
+		if (!profile) {
+			// Missing public.users row: provisioning anomaly, not a deactivation.
+			// Fail open (previous behavior) but surface it in the logs.
+			logError(
+				"auth.login.profileMissing",
+				new Error("Auth user has no public.users row"),
+				{ user_id: userId },
+			);
 		}
 
 		// 3. Si es exitoso, devolvemos la sesión y el usuario
