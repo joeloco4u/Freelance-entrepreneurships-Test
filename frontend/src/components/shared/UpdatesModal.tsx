@@ -57,7 +57,6 @@ export default function UpdatesModal({
             loading={loading}
             unreadCount={0}
             onMarkAsRead={() => {}}
-            variant="popover"
           />
         </div>
       </div>
